@@ -38,10 +38,11 @@ SNAPSHOT_SCHEMA = pa.schema(
 CDC_SCHEMA = pa.schema(
     [
         ("device_id", pa.string()),
-        ("event", pa.string()),
-        ("value", pa.string()),
-        ("source", pa.string()),
+        ("property", pa.string()),
+        ("old_value", pa.string()),
+        ("new_value", pa.string()),
         ("event_ts", pa.timestamp("us", tz="UTC")),
+        ("source", pa.string()),
     ]
 )
 

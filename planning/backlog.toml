@@ -157,6 +157,7 @@ id = "M5-02"
 milestone = "M5"
 title = "Stage 1-3: ingest CDC events as change events alongside the snapshot diff"
 size = "S"
+status = "done"
 depends_on = ["M5-01"]
 acceptance = [
   "Routine CDC events are not emitted (same idle/running principle as snapshots)",

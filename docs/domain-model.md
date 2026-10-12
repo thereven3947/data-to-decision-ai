@@ -76,16 +76,17 @@ One row per device per snapshot run, stored as Parquet under `data/snapshots/run
 
 ## CDC event stream (stage 1, event-native devices, M5)
 
-One row per device state change, at second precision, under `data/cdc/`. Mirrors Home Assistant
-`state_changed` events, so the real adapter keeps the same schema.
+One row per device property change, at second precision, under `data/cdc/`. Same shape as a
+change event and as Home Assistant `state_changed` (old and new state), so the real adapter keeps
+the schema. Momentary signals are pulses (`idle → pressed → idle`).
 
 | Column | Example |
 |--------|---------|
 | `device_id` | `garage_door` |
-| `event` | `open`, `close`, `on`, `off`, `motion`, `person_detected`, `ring`, `answered`, `battery_low`, `offline` |
-| `value` | `"open"`, `"35"` (battery %), `null` |
-| `source` | `remote`, `app`, `button`, `automation`, `manual`, `device` |
+| `property` | `door`, `power`, `motion`, `person`, `button`, `call`, `battery`, `presence` |
+| `old_value` → `new_value` | `closed` → `open`, `off` → `on`, `idle` → `pressed` |
 | `event_ts` | `2026-10-02T09:10:42Z` |
+| `source` | `remote`, `app`, `button`, `automation`, `manual`, `device` |
 
 Routine CDC events are not emitted as change events. Context rules (duration, policy zone,
 sequence) turn them into meaningful changes such as `garage_left_open`, `motion_while_away`,
