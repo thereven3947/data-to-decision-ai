@@ -81,6 +81,7 @@ id = "M2-02"
 milestone = "M2"
 title = "Data-quality rules (negative energy delta, clock skew, duplicate device)"
 size = "S"
+status = "done"
 depends_on = ["M2-01"]
 
 [[issue]]

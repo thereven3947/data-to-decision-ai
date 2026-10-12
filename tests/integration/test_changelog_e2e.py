@@ -25,12 +25,8 @@ def test_changelog_recovers_planted_changes_without_noise(
     rows = load_snapshots(tmp_path)
     changes = build_changelog(rows, load_semantics(CONFIG_DIR / "semantics.toml"))
 
-    # Data-quality rules are M2-02; everything else must match the ground truth exactly.
     expected = {
-        (e["device_id"], e["property"], e["ts"])
-        for s in result.ground_truth
-        for e in s["events"]
-        if not e["property"].startswith("dq.")
+        (e["device_id"], e["property"], e["ts"]) for s in result.ground_truth for e in s["events"]
     }
     found = {(c.device_id, c.property, c.snapshot_ts_after.isoformat()) for c in changes}
     assert found - expected == set(), "noise leaked into the changelog"
@@ -38,6 +34,11 @@ def test_changelog_recovers_planted_changes_without_noise(
 
     tags = {c.semantic_tag for c in changes}
     assert {"schedule_shift_off_peak", "device_added", "device_removed", "network_change"} <= tags
+    assert {c.semantic_tag for c in changes if c.change_kind == "data_quality"} == {
+        "dq_negative_energy_delta",
+        "dq_clock_skew",
+        "dq_duplicate_device",
+    }
 
 
 def test_duplicate_rows_are_collapsed(

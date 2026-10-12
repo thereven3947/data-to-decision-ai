@@ -122,5 +122,11 @@ def _change(
 
 
 def build_changelog(rows: list[dict[str, Any]], semantics: Semantics) -> list[Change]:
-    changes = diff_properties(rows, semantics) + diff_presence(rows, semantics)
+    from d2d.pipeline.quality import check_quality  # quality imports Change from this module
+
+    changes = (
+        diff_properties(rows, semantics)
+        + diff_presence(rows, semantics)
+        + check_quality(rows, semantics)
+    )
     return sorted(changes, key=lambda c: (c.snapshot_ts_after, c.device_id, c.property))
