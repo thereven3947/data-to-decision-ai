@@ -70,5 +70,13 @@ uv sync
 uv run d2d simulate          # 3 days of 15-min snapshots + 12 planted scenarios -> data/
 uv run d2d run               # stages 2-3: semantic changelog + change events
 uv run d2d eval changelog    # score events vs ground truth (exit 1 if a gate fails)
+```
+
+Create the GitHub milestones and issues from the backlog (idempotent, safe to re-run):
+
+```powershell
+uv run python scripts/seed_github_backlog.py --repo <owner>/data-to-decision-ai --dry-run
+$env:GITHUB_TOKEN = "<token with Issues: read and write>"
+uv run python scripts/seed_github_backlog.py --repo <owner>/data-to-decision-ai
 uv run pytest
 ```
