@@ -1,0 +1,11 @@
+# Event linking (stage 4). See docs/domain-model.md#event-linking--change-story-stage-4.
+# Two events are linked when any rule below holds; connected components become change stories.
+# These values are a calibration target (M11); `d2d eval linking` reports pairwise F1 and ARI.
+
+[windows]
+device_minutes = 60      # same device
+topology_minutes = 30    # same circuit or same upstream network (router / hub)
+campaign_hours = 24      # same property set to the same new value on different devices
+
+[campaign]
+properties = ["firmware_version"]

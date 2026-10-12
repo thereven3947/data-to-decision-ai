@@ -105,6 +105,7 @@ id = "M3-01"
 milestone = "M3"
 title = "Event linking graph + linking.toml + pairwise F1 / ARI eval"
 size = "M"
+status = "done"
 depends_on = ["M2-03"]
 
 [[issue]]

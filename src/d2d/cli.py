@@ -9,8 +9,9 @@ import typer
 
 from d2d import __version__
 from d2d.config import config_dir, load_household, load_pipeline, parse_utc
-from d2d.evaluation import evaluate_changelog
+from d2d.evaluation import evaluate_changelog, evaluate_linking
 from d2d.pipeline.events import run_pipeline
+from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
 from d2d.simulator import simulate as run_simulation
 from d2d.simulator import write_ground_truth, write_snapshots
@@ -63,12 +64,25 @@ def simulate(
 
 @app.command()
 def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
-    """Stages 2-3: semantic changelog + change events from all snapshots."""
-    semantics = load_semantics(config_dir(config) / "semantics.toml")
-    s = run_pipeline(data_dir, semantics)
+    """Stages 2-4: semantic changelog, change events and linked change stories."""
+    cfg_dir = config_dir(config)
+    s = run_pipeline(
+        data_dir,
+        load_semantics(cfg_dir / "semantics.toml"),
+        load_linking(cfg_dir / "linking.toml"),
+        load_household(cfg_dir / "household.toml").id,
+    )
     kinds = ", ".join(f"{k}={v}" for k, v in s.by_kind.items())
     typer.echo(f"{s.snapshot_rows} snapshot rows -> {s.changes} changes -> {s.events} events")
     typer.echo(f"by kind: {kinds}")
+    typer.echo(f"{s.stories} change stories")
+
+
+@eval_app.command("linking")
+def eval_linking(data_dir: DataDir = Path("data")) -> None:
+    """Report linking quality vs scenario ground truth (baseline; no gate yet)."""
+    for name, value in evaluate_linking(data_dir).items():
+        typer.echo(f"{name:<15}{value:.3f}")
 
 
 @eval_app.command("changelog")

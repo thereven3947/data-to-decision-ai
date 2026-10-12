@@ -33,3 +33,14 @@ def test_simulate_run_eval_passes_gate(tmp_path: Path) -> None:
     failing = runner.invoke(app, ["eval", "changelog", *common, "--min-precision", "1.01"])
     assert failing.exit_code == 1
     assert "gate: FAIL" in failing.output
+
+    linking = runner.invoke(app, ["eval", "linking", *common])
+    assert linking.exit_code == 0, linking.output
+    assert "pair_f1" in linking.output and "ari" in linking.output
+
+
+def test_ari_known_values() -> None:
+    from d2d.evaluation import _ari
+
+    assert _ari(["a", "a", "b", "b"], ["x", "x", "y", "y"]) == 1.0
+    assert _ari(["a", "a", "b", "b"], ["x", "y", "x", "y"]) < 0

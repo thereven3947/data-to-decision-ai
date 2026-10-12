@@ -11,6 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from d2d.pipeline.changelog import Change, build_changelog
+from d2d.pipeline.linking import LinkingConfig, TopologyIndex, build_stories
 from d2d.pipeline.semantics import Semantics
 from d2d.pipeline.snapshots import load_snapshots
 
@@ -39,6 +40,19 @@ EVENT_SCHEMA = pa.schema(
         ("semantic_tag", pa.string()),
         ("event_ts", _TS),
         ("snapshot_run_id", pa.string()),
+    ]
+)
+STORY_SCHEMA = pa.schema(
+    [
+        ("story_id", pa.string()),
+        ("home_id", pa.string()),
+        ("window_start", _TS),
+        ("window_end", _TS),
+        ("device_ids", pa.list_(pa.string())),
+        ("event_ids", pa.list_(pa.string())),
+        ("event_count", pa.int32()),
+        ("link_reasons", pa.list_(pa.string())),
+        ("linking_config_sha", pa.string()),
     ]
 )
 
@@ -71,16 +85,21 @@ class RunSummary:
     changes: int
     events: int
     by_kind: dict[str, int]
+    stories: int = 0
 
 
-def run_pipeline(data_dir: Path, semantics: Semantics) -> RunSummary:
-    """Full recompute of stages 2-3 from all snapshots (idempotent)."""
+def run_pipeline(
+    data_dir: Path, semantics: Semantics, linking: LinkingConfig, home_id: str
+) -> RunSummary:
+    """Full recompute of stages 2-4 from all snapshots (idempotent)."""
     rows = load_snapshots(data_dir)
     changes = build_changelog(rows, semantics)
     events = to_events(changes)
+    stories = build_stories(events, TopologyIndex(rows), linking, home_id)
     for name, schema, data in (
         ("changelog", CHANGELOG_SCHEMA, [c.as_row() for c in changes]),
         ("events", EVENT_SCHEMA, events),
+        ("stories", STORY_SCHEMA, stories),
     ):
         out = data_dir / name
         out.mkdir(parents=True, exist_ok=True)
@@ -88,4 +107,6 @@ def run_pipeline(data_dir: Path, semantics: Semantics) -> RunSummary:
     by_kind: dict[str, int] = {}
     for e in events:
         by_kind[e["change_kind"]] = by_kind.get(e["change_kind"], 0) + 1
-    return RunSummary(len(rows), len(changes), len(events), dict(sorted(by_kind.items())))
+    return RunSummary(
+        len(rows), len(changes), len(events), dict(sorted(by_kind.items())), len(stories)
+    )
