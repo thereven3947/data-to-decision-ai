@@ -13,8 +13,8 @@ from d2d.evaluation import evaluate_changelog, evaluate_linking
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
+from d2d.simulator import generate_cdc, write_cdc, write_ground_truth, write_snapshots
 from d2d.simulator import simulate as run_simulation
-from d2d.simulator import write_ground_truth, write_snapshots
 
 app = typer.Typer(no_args_is_help=True, help="Data to Decision with AI (D2D)")
 eval_app = typer.Typer(no_args_is_help=True, help="Deterministic evals against ground truth.")
@@ -55,9 +55,17 @@ def simulate(
     )
     partitions = write_snapshots(result.rows, data_dir)
     gt_path = write_ground_truth(result.ground_truth, data_dir)
+    cdc = generate_cdc(
+        household,
+        start=parse_utc(start) if start else pipeline.start,
+        days=days if days is not None else pipeline.days,
+        seed=seed if seed is not None else pipeline.seed,
+    )
+    cdc_path = write_cdc(cdc, data_dir)
     gt_events = sum(len(s["events"]) for s in result.ground_truth)
     typer.echo(
         f"{partitions} snapshot runs, {len(result.rows)} rows -> {data_dir / 'snapshots'}\n"
+        f"{len(cdc)} CDC events -> {cdc_path}\n"
         f"{len(result.ground_truth)} scenarios, {gt_events} ground-truth events -> {gt_path}"
     )
 

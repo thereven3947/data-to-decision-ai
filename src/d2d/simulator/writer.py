@@ -35,6 +35,15 @@ SNAPSHOT_SCHEMA = pa.schema(
         ("source", pa.string()),
     ]
 )
+CDC_SCHEMA = pa.schema(
+    [
+        ("device_id", pa.string()),
+        ("event", pa.string()),
+        ("value", pa.string()),
+        ("source", pa.string()),
+        ("event_ts", pa.timestamp("us", tz="UTC")),
+    ]
+)
 
 
 def write_snapshots(rows: list[dict[str, Any]], data_dir: Path) -> int:
@@ -51,6 +60,14 @@ def write_snapshots(rows: list[dict[str, Any]], data_dir: Path) -> int:
         table = pa.Table.from_pylist(run_rows, schema=SNAPSHOT_SCHEMA)
         pq.write_table(table, part / "part-0.parquet")
     return len(by_run)
+
+
+def write_cdc(events: list[dict[str, Any]], data_dir: Path) -> Path:
+    out = data_dir / "cdc"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "events.parquet"
+    pq.write_table(pa.Table.from_pylist(events, schema=CDC_SCHEMA), path)
+    return path
 
 
 def write_ground_truth(ground_truth: list[dict[str, Any]], data_dir: Path) -> Path:

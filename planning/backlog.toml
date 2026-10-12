@@ -144,6 +144,7 @@ id = "M5-01"
 milestone = "M5"
 title = "Simulator: Ring camera, Ring doorbell, light switches, garage door + CDC event stream"
 size = "M"
+status = "done"
 depends_on = ["M2-03"]
 acceptance = [
   "Devices declared in household.toml (kind, room, network, config attributes)",

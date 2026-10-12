@@ -216,3 +216,66 @@ always_on = true
 firmware_version = "2.0.0"
 base_rssi_dbm = -59
 active = false
+
+# --- event-native devices (M5): fast state changes come from the CDC stream ---------------------
+[[device]]
+id = "ring_camera_front"
+kind = "ring_camera"
+room = "front_yard"
+circuit = "circuit_living"
+network = "router_mesh_2"
+rated_w = 4
+always_on = true
+firmware_version = "3.48.1"
+mode = "record_on_motion"
+settings = { motion_sensitivity = 5, person_detection = true }
+base_rssi_dbm = -64
+
+[[device]]
+id = "ring_doorbell"
+kind = "ring_doorbell"
+room = "front_door"
+circuit = "circuit_living"
+network = "router_mesh_2"
+rated_w = 3
+always_on = true
+firmware_version = "3.48.1"
+settings = { chime = true, quiet_hours = true }
+base_rssi_dbm = -61
+
+[[device]]
+id = "light_porch"
+kind = "light_switch"
+room = "front_door"
+circuit = "circuit_living"
+network = "router_mesh_2"
+rated_w = 12
+standby_w = 0.3
+firmware_version = "1.4.0"
+schedule = { start = "18:30", end = "23:00" }
+mode = "automation"
+base_rssi_dbm = -60
+
+[[device]]
+id = "light_living"
+kind = "light_switch"
+room = "living"
+circuit = "circuit_living"
+network = "router_mesh_2"
+rated_w = 40
+standby_w = 0.3
+firmware_version = "1.4.0"
+mode = "manual"
+base_rssi_dbm = -55
+
+[[device]]
+id = "garage_door"
+kind = "garage_door"
+room = "garage"
+circuit = "circuit_garage"
+network = "router_mesh_2"
+rated_w = 350
+standby_w = 2.0
+firmware_version = "2.1.7"
+settings = { auto_close_min = 0 }
+base_rssi_dbm = -68
