@@ -55,6 +55,7 @@ charge of what matters:
 - [Evaluation and calibration](docs/evaluation-and-calibration.md) — feedback routing, eval gates, KPIs
 - [Development plan](docs/development-plan.md) — environments, repo layout, CI/CD, workflow
 - [Feature roadmap](docs/feature-roadmap.md) — milestones M0–M11 and exit criteria
+- [Mac mini setup runbook](docs/mac-mini-setup.md) — M4-01 manual checklist
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 
