@@ -66,6 +66,35 @@ def _routine(
     return out
 
 
+def _planted_open(household: Household, start: datetime) -> tuple[datetime, datetime] | None:
+    """Scenario garage_left_open_overnight: 2nd local evening 22:15 -> next day 06:30."""
+    if "garage_door" not in household.devices:
+        return None
+    tz = ZoneInfo(household.timezone)
+    day = start.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    opened = (day + timedelta(days=1)).replace(hour=22, minute=15)
+    closed = (day + timedelta(days=2)).replace(hour=6, minute=30)
+    return opened.astimezone(start.tzinfo), closed.astimezone(start.tzinfo)
+
+
+def cdc_ground_truth(
+    household: Household, *, start: datetime, days: int, garage_minutes: int = 30
+) -> list[dict[str, Any]]:
+    planted = _planted_open(household, start)
+    if planted is None or planted[1] >= start + timedelta(days=days):
+        return []
+    ts = (planted[0] + timedelta(minutes=garage_minutes)).isoformat()
+    return [
+        {
+            "scenario_id": "garage_left_open_overnight",
+            "category": "access_left_open",
+            "events": [{"device_id": "garage_door", "property": "door.duration", "ts": ts}],
+            "start": ts,
+            "end": ts,
+        }
+    ]
+
+
 def generate_cdc(
     household: Household, *, start: datetime, days: int, seed: int
 ) -> list[dict[str, Any]]:
@@ -81,6 +110,10 @@ def generate_cdc(
             if spec.kind in CDC_KINDS and spec.active:
                 for ts, prop, new, src in _routine(spec.kind, day, spec.schedule, rng):
                     planned.append((ts.astimezone(start.tzinfo), spec.id, prop, new, src))
+    overnight = _planted_open(household, start)
+    if overnight is not None:
+        planned.append((overnight[0], "garage_door", "door", "open", "app"))
+        planned.append((overnight[1], "garage_door", "door", "closed", "button"))
 
     state: dict[tuple[str, str], str] = {}
     rows: list[dict[str, Any]] = []
