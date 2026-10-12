@@ -1,0 +1,9 @@
+[pipeline]
+# Snapshot cadence. The real grid system is daily; the toy defaults to 15 minutes so the
+# "days -> minutes" story is demonstrable.
+cadence_minutes = 15
+
+[simulator]
+seed = 7
+days = 3
+start = "2026-10-01T00:00:00Z"

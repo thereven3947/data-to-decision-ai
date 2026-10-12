@@ -1,0 +1,173 @@
+# Source of truth for GitHub milestones and issues. Sizes: S (<= 1 session), M (1-2), L (2-3).
+# Tag `manual` = no AI credit needed.
+
+[[milestone]]
+id = "M0"
+title = "M0 · Foundations"
+
+[[milestone]]
+id = "M1"
+title = "M1 · Simulator"
+
+[[milestone]]
+id = "M2"
+title = "M2 · Changelog & events"
+
+[[milestone]]
+id = "M3"
+title = "M3 · Event linking"
+
+[[milestone]]
+id = "M4"
+title = "M4 · Mac mini & Postgres"
+
+[[milestone]]
+id = "M5"
+title = "M5 · HITL review"
+
+[[milestone]]
+id = "M6"
+title = "M6 · ML classifier"
+
+[[milestone]]
+id = "M7"
+title = "M7 · Enrichment & ontology"
+
+[[milestone]]
+id = "M8"
+title = "M8 · Ontology API & UI"
+
+[[milestone]]
+id = "M9"
+title = "M9 · Copilot agent"
+
+[[milestone]]
+id = "M10"
+title = "M10 · Feedback, calibration & KPIs"
+
+# --- done -------------------------------------------------------------------------------------
+[[issue]]
+id = "M0-01"
+milestone = "M0"
+title = "Project skeleton, tooling and CI"
+size = "S"
+status = "done"
+
+[[issue]]
+id = "M1-01"
+milestone = "M1"
+title = "Household simulator with scenario injectors and ground truth"
+size = "M"
+status = "done"
+depends_on = ["M0-01"]
+
+# --- next -------------------------------------------------------------------------------------
+[[issue]]
+id = "M2-01"
+milestone = "M2"
+title = "Semantic changelog: typed diff + semantics.toml rule engine"
+size = "M"
+depends_on = ["M1-01"]
+acceptance = [
+  "Snapshots loaded with DuckDB, duplicates de-duplicated",
+  "schedule/settings JSON flattened to schedule.* / settings.* properties",
+  "Rules in config/semantics.toml applied first-match; unmatched changes dropped",
+  "Presence diff emits device_added / device_removed",
+]
+
+[[issue]]
+id = "M2-02"
+milestone = "M2"
+title = "Data-quality rules (negative energy delta, clock skew, duplicate device)"
+size = "S"
+depends_on = ["M2-01"]
+
+[[issue]]
+id = "M2-03"
+milestone = "M2"
+title = "Change events + `d2d run` + `d2d eval changelog` gate"
+size = "S"
+depends_on = ["M2-02"]
+acceptance = [
+  "Idempotent event_id on (device_id, property, event_ts)",
+  "Event recall = 1.0 and precision = 1.0 on default scenarios; DQ recall >= 0.95",
+]
+
+[[issue]]
+id = "M3-01"
+milestone = "M3"
+title = "Event linking graph + linking.toml + pairwise F1 / ARI eval"
+size = "M"
+depends_on = ["M2-03"]
+
+[[issue]]
+id = "M4-01"
+milestone = "M4"
+title = "Mac mini base setup (Homebrew, uv, OrbStack, Ollama, Tailscale)"
+size = "S"
+tags = ["manual"]
+
+[[issue]]
+id = "M4-02"
+milestone = "M4"
+title = "Postgres schema + Alembic migrations; load change events"
+size = "M"
+depends_on = ["M2-03", "M4-01"]
+
+[[issue]]
+id = "M4-03"
+milestone = "M4"
+title = "Self-hosted runner + deploy workflow + launchd pipeline schedule"
+size = "M"
+depends_on = ["M4-01"]
+
+[[issue]]
+id = "M4-04"
+milestone = "M4"
+title = "Cloudflare Tunnel + Access"
+size = "S"
+tags = ["manual"]
+depends_on = ["M4-03"]
+
+# --- later (split into issues when the milestone starts) --------------------------------------
+[[issue]]
+id = "M5-01"
+milestone = "M5"
+title = "Review queue, cases and labeled training set"
+size = "L"
+depends_on = ["M3-01", "M4-02"]
+
+[[issue]]
+id = "M6-01"
+milestone = "M6"
+title = "Calibrated precision-first classifier with abstain"
+size = "L"
+depends_on = ["M5-01"]
+
+[[issue]]
+id = "M7-01"
+milestone = "M7"
+title = "Enrichment templates, impact calculators, ontology tables"
+size = "L"
+depends_on = ["M6-01"]
+
+[[issue]]
+id = "M8-01"
+milestone = "M8"
+title = "Ontology API with permissions + Change Control UI"
+size = "L"
+depends_on = ["M7-01"]
+
+[[issue]]
+id = "M9-01"
+milestone = "M9"
+title = "Copilot agent: provider, tools, skills, grounding checker, llm-eval workflow"
+size = "L"
+depends_on = ["M8-01"]
+
+[[issue]]
+id = "M10-01"
+milestone = "M10"
+title = "Feedback routing, nightly calibration PRs, KPI dashboard"
+size = "L"
+depends_on = ["M9-01"]

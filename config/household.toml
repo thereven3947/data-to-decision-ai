@@ -1,0 +1,218 @@
+# Static topology of the demo home (stage 1 input). See docs/domain-model.md.
+# Devices with `active = false` are spares that scenarios add later (replacement, new device).
+
+[home]
+id = "home_demo"
+timezone = "America/Los_Angeles"
+
+[[upstream]]
+id = "panel_main"
+kind = "panel"
+
+[[upstream]]
+id = "hub_zigbee"
+kind = "hub"
+
+[[upstream]]
+id = "router_mesh_1"
+kind = "router"
+
+[[upstream]]
+id = "router_mesh_2"
+kind = "router"
+
+[[upstream]]
+id = "router_mesh_3"
+kind = "router"
+
+[[circuit]]
+id = "circuit_kitchen_1"
+panel = "panel_main"
+rating_amps = 20
+
+[[circuit]]
+id = "circuit_kitchen_2"
+panel = "panel_main"
+rating_amps = 20
+
+[[circuit]]
+id = "circuit_laundry"
+panel = "panel_main"
+rating_amps = 30
+
+[[circuit]]
+id = "circuit_garage"
+panel = "panel_main"
+rating_amps = 50
+
+[[circuit]]
+id = "circuit_utility"
+panel = "panel_main"
+rating_amps = 50
+
+[[circuit]]
+id = "circuit_living"
+panel = "panel_main"
+rating_amps = 15
+
+[[circuit]]
+id = "circuit_bedroom"
+panel = "panel_main"
+rating_amps = 15
+
+[[device]]
+id = "dishwasher"
+kind = "dishwasher"
+room = "kitchen"
+circuit = "circuit_kitchen_2"
+network = "router_mesh_1"
+rated_w = 1800
+standby_w = 1.5
+firmware_version = "4.1.0"
+schedule = { start = "18:00", end = "19:30" }
+mode = "eco"
+settings = { child_lock = true }
+base_rssi_dbm = -58
+
+[[device]]
+id = "dishwasher_2"
+kind = "dishwasher"
+room = "kitchen"
+circuit = "circuit_kitchen_2"
+network = "router_mesh_1"
+rated_w = 1700
+standby_w = 0.8
+firmware_version = "5.0.2"
+schedule = { start = "18:00", end = "19:30" }
+mode = "eco"
+settings = { child_lock = true }
+base_rssi_dbm = -54
+active = false
+
+[[device]]
+id = "washer"
+kind = "washer"
+room = "laundry"
+circuit = "circuit_laundry"
+network = "router_mesh_1"
+rated_w = 2000
+standby_w = 2.0
+firmware_version = "2.3.1"
+schedule = { start = "19:00", end = "20:00" }
+mode = "normal"
+settings = { child_lock = true }
+base_rssi_dbm = -66
+
+[[device]]
+id = "dryer"
+kind = "dryer"
+room = "laundry"
+circuit = "circuit_laundry"
+network = "router_mesh_1"
+rated_w = 3000
+standby_w = 2.0
+firmware_version = "2.3.1"
+schedule = { start = "20:00", end = "21:00" }
+mode = "normal"
+base_rssi_dbm = -67
+
+[[device]]
+id = "robot_vacuum"
+kind = "robot_vacuum"
+room = "living"
+circuit = "circuit_living"
+network = "router_mesh_1"
+rated_w = 60
+standby_w = 3.0
+firmware_version = "7.8.0"
+schedule = { start = "10:00", end = "11:00" }
+mode = "standard"
+base_rssi_dbm = -61
+
+[[device]]
+id = "thermostat"
+kind = "thermostat"
+room = "living"
+circuit = "circuit_living"
+network = "hub_zigbee"
+rated_w = 5
+always_on = true
+firmware_version = "1.2.0"
+mode = "cool"
+setpoint = 22.0
+base_rssi_dbm = -52
+
+[[device]]
+id = "water_heater"
+kind = "water_heater"
+room = "utility"
+circuit = "circuit_utility"
+network = "router_mesh_2"
+rated_w = 450
+always_on = true
+firmware_version = "3.0.4"
+mode = "heat_pump"
+setpoint = 55.0
+settings = { max_temp_c = 60 }
+base_rssi_dbm = -63
+
+[[device]]
+id = "ev_charger"
+kind = "ev_charger"
+room = "garage"
+circuit = "circuit_garage"
+network = "router_mesh_2"
+rated_w = 7200
+standby_w = 4.0
+firmware_version = "6.2.0"
+schedule = { start = "17:00", end = "21:00" }
+mode = "scheduled"
+settings = { max_current_a = 32 }
+base_rssi_dbm = -70
+
+[[device]]
+id = "fridge"
+kind = "fridge"
+room = "kitchen"
+circuit = "circuit_kitchen_1"
+network = "router_mesh_2"
+rated_w = 150
+always_on = true
+firmware_version = "1.9.3"
+setpoint = 4.0
+base_rssi_dbm = -57
+
+[[device]]
+id = "smart_plug_tv"
+kind = "smart_plug"
+room = "living"
+circuit = "circuit_living"
+network = "hub_zigbee"
+rated_w = 120
+always_on = true
+firmware_version = "1.2.0"
+base_rssi_dbm = -50
+
+[[device]]
+id = "smart_plug_lamp"
+kind = "smart_plug"
+room = "bedroom"
+circuit = "circuit_bedroom"
+network = "hub_zigbee"
+rated_w = 40
+always_on = true
+firmware_version = "1.2.0"
+base_rssi_dbm = -60
+tags = ["private"]
+
+[[device]]
+id = "smart_plug_office"
+kind = "smart_plug"
+room = "office"
+circuit = "circuit_bedroom"
+network = "hub_zigbee"
+rated_w = 90
+always_on = true
+firmware_version = "2.0.0"
+base_rssi_dbm = -59
+active = false

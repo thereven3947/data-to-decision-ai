@@ -1,0 +1,135 @@
+# Semantic changelog rules (stage 2). See docs/domain-model.md#semantic-changelog-stage-2.
+#
+# Rules are evaluated in order; the first match wins. A property change that matches no rule is
+# treated as expected operation (e.g. idle <-> running, small RSSI jitter) and is NOT emitted.
+#
+# Match fields:
+#   property        fnmatch pattern on the flattened property name (schedule.start, settings.*, dq.*)
+#   old_in / new_in value lists (values are compared as strings; booleans are "true"/"false")
+#   old_is_null / new_is_null
+#   old_in_window / new_in_window   name of a [windows] entry, for HH:MM values
+#   min_abs_delta   numeric threshold on |new - old| (both values must be numeric)
+
+[windows]
+peak = ["16:00", "21:00"]
+off_peak = ["22:00", "06:00"]
+
+[data_quality]
+clock_skew_threshold_s = 300
+
+# --- data quality (emitted on onset only) ---------------------------------------------------
+[[rule]]
+property = "dq.negative_energy_delta"
+change_kind = "data_quality"
+tag = "dq_negative_energy_delta"
+
+[[rule]]
+property = "dq.clock_skew"
+change_kind = "data_quality"
+tag = "dq_clock_skew"
+
+[[rule]]
+property = "dq.duplicate_device"
+change_kind = "data_quality"
+tag = "dq_duplicate_device"
+
+# --- topology -------------------------------------------------------------------------------
+[[rule]]
+property = "presence"
+new_in = ["present"]
+change_kind = "topology"
+tag = "device_added"
+
+[[rule]]
+property = "presence"
+change_kind = "topology"
+tag = "device_removed"
+
+[[rule]]
+property = "circuit_id"
+change_kind = "topology"
+tag = "circuit_change"
+
+[[rule]]
+property = "room"
+change_kind = "topology"
+tag = "room_change"
+
+[[rule]]
+property = "network_id"
+change_kind = "topology"
+tag = "network_change"
+
+# --- configuration --------------------------------------------------------------------------
+[[rule]]
+property = "firmware_version"
+change_kind = "config"
+tag = "firmware_update"
+
+[[rule]]
+property = "schedule.start"
+old_in_window = "peak"
+new_in_window = "off_peak"
+change_kind = "config"
+tag = "schedule_shift_off_peak"
+
+[[rule]]
+property = "schedule.*"
+change_kind = "config"
+tag = "schedule_change"
+
+[[rule]]
+property = "setpoint"
+change_kind = "config"
+tag = "setpoint_change"
+
+[[rule]]
+property = "mode"
+change_kind = "config"
+tag = "mode_change"
+
+[[rule]]
+property = "settings.child_lock"
+change_kind = "config"
+tag = "safety_child_lock_change"
+
+[[rule]]
+property = "settings.*"
+change_kind = "config"
+tag = "safety_setting_change"
+
+# --- operational ----------------------------------------------------------------------------
+[[rule]]
+property = "state"
+new_in = ["error"]
+change_kind = "operational"
+tag = "device_error"
+
+[[rule]]
+property = "state"
+new_in = ["offline"]
+change_kind = "operational"
+tag = "device_offline"
+
+[[rule]]
+property = "state"
+old_in = ["error", "offline"]
+change_kind = "operational"
+tag = "device_recovered"
+
+[[rule]]
+property = "error_code"
+new_is_null = false
+change_kind = "operational"
+tag = "error_raised"
+
+[[rule]]
+property = "error_code"
+change_kind = "operational"
+tag = "error_cleared"
+
+[[rule]]
+property = "rssi_dbm"
+min_abs_delta = 10
+change_kind = "operational"
+tag = "signal_shift"
