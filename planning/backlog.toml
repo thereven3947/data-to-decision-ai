@@ -67,6 +67,7 @@ id = "M2-01"
 milestone = "M2"
 title = "Semantic changelog: typed diff + semantics.toml rule engine"
 size = "M"
+status = "done"
 depends_on = ["M1-01"]
 acceptance = [
   "Snapshots loaded with DuckDB, duplicates de-duplicated",

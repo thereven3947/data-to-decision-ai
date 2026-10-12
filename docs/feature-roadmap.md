@@ -7,7 +7,7 @@ Milestones follow the pipeline stages. Each one ends with something demoable; is
 |-----------|--------|-------|---------------|--------|
 | **M0 · Foundations** | — | uv project, `d2d` CLI, ruff/mypy/pytest, CI, config loading | `make check` green locally and in CI | ✅ done |
 | **M1 · Simulator** | 1 | Household topology, baseline device model, 12 scenario injectors, Parquet snapshots, ground truth JSONL | `d2d simulate` is deterministic for a seed; every scenario visible in snapshots | ✅ done |
-| **M2 · Changelog & events** | 2–3 | Typed diff, `semantics.toml` rules, data-quality rules, change events, `d2d run`, `d2d eval changelog` | Event recall 1.0 and DQ recall ≥ 0.95 on ground truth; no noise events | next (rules drafted in `config/semantics.toml`) |
+| **M2 · Changelog & events** | 2–3 | Typed diff, `semantics.toml` rules, data-quality rules, change events, `d2d run`, `d2d eval changelog` | Event recall 1.0 and DQ recall ≥ 0.95 on ground truth; no noise events | in progress: M2-01 done; next M2-02 (data-quality rules) |
 | **M3 · Event linking** | 4 | Graph linking by device / topology / campaign / window, `linking.toml` | Pairwise F1 and ARI vs scenarios reported; baseline committed | |
 | **M4 · Mac mini & Postgres** | — | Mac mini setup, OrbStack Postgres, Alembic, self-hosted runner, deploy workflow, Cloudflare Tunnel | Push to `main` deploys to the Mac mini after an approval click | |
 | **M5 · HITL review** | 5–6 | Review queue, cases, labeled training set with provenance, simulated reviewer | Stories labeled through the UI/CLI and versioned | |
