@@ -89,6 +89,7 @@ id = "M2-03"
 milestone = "M2"
 title = "Change events + `d2d run` + `d2d eval changelog` gate"
 size = "S"
+status = "done"
 depends_on = ["M2-02"]
 acceptance = [
   "Idempotent event_id on (device_id, property, event_ts)",

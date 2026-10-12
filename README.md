@@ -60,12 +60,14 @@ charge of what matters:
 
 ## Status
 
-**M0 Foundations** and **M1 Simulator** are done; next is **M2 Changelog & events**
+**M0 Foundations**, **M1 Simulator** and **M2 Changelog & events** are done; next is **M3 Event linking**
 (see the [roadmap](docs/feature-roadmap.md) and [backlog](planning/backlog.toml)).
 
 ```powershell
 python -m pip install uv     # once
 uv sync
 uv run d2d simulate          # 3 days of 15-min snapshots + 12 planted scenarios -> data/
+uv run d2d run               # stages 2-3: semantic changelog + change events
+uv run d2d eval changelog    # score events vs ground truth (exit 1 if a gate fails)
 uv run pytest
 ```

@@ -9,10 +9,15 @@ import typer
 
 from d2d import __version__
 from d2d.config import config_dir, load_household, load_pipeline, parse_utc
+from d2d.evaluation import evaluate_changelog
+from d2d.pipeline.events import run_pipeline
+from d2d.pipeline.semantics import load_semantics
 from d2d.simulator import simulate as run_simulation
 from d2d.simulator import write_ground_truth, write_snapshots
 
 app = typer.Typer(no_args_is_help=True, help="Data to Decision with AI (D2D)")
+eval_app = typer.Typer(no_args_is_help=True, help="Deterministic evals against ground truth.")
+app.add_typer(eval_app, name="eval")
 
 DataDir = Annotated[Path, typer.Option(help="Data directory (gitignored).")]
 ConfigDir = Annotated[Path | None, typer.Option(help="Config directory (default ./config).")]
@@ -54,6 +59,42 @@ def simulate(
         f"{partitions} snapshot runs, {len(result.rows)} rows -> {data_dir / 'snapshots'}\n"
         f"{len(result.ground_truth)} scenarios, {gt_events} ground-truth events -> {gt_path}"
     )
+
+
+@app.command()
+def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
+    """Stages 2-3: semantic changelog + change events from all snapshots."""
+    semantics = load_semantics(config_dir(config) / "semantics.toml")
+    s = run_pipeline(data_dir, semantics)
+    kinds = ", ".join(f"{k}={v}" for k, v in s.by_kind.items())
+    typer.echo(f"{s.snapshot_rows} snapshot rows -> {s.changes} changes -> {s.events} events")
+    typer.echo(f"by kind: {kinds}")
+
+
+@eval_app.command("changelog")
+def eval_changelog(
+    data_dir: DataDir = Path("data"),
+    min_recall: Annotated[float, typer.Option(help="Gate: event recall.")] = 1.0,
+    min_precision: Annotated[float, typer.Option(help="Gate: event precision.")] = 1.0,
+    min_dq_recall: Annotated[float, typer.Option(help="Gate: data-quality recall.")] = 0.95,
+) -> None:
+    """Score change events against scenario ground truth; exit 1 if a gate fails."""
+    r = evaluate_changelog(data_dir)
+    typer.echo(f"recall    {r.recall:.3f}  ({r.matched}/{r.expected})")
+    typer.echo(f"precision {r.precision:.3f}  ({r.matched}/{r.found})")
+    typer.echo(f"dq recall {r.dq_recall:.3f}  ({r.dq_matched}/{r.dq_expected})")
+    for key in r.missed[:10]:
+        typer.echo(f"  missed     {key}")
+    for key in r.unexpected[:10]:
+        typer.echo(f"  unexpected {key}")
+    gates = [
+        r.recall >= min_recall,
+        r.precision >= min_precision,
+        r.dq_recall >= min_dq_recall,
+    ]
+    typer.echo("gate: PASS" if all(gates) else "gate: FAIL")
+    if not all(gates):
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
