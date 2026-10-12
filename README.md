@@ -54,7 +54,7 @@ charge of what matters:
 - [Agent and skills](docs/agent-and-skills.md) — what the LLM may and may not do
 - [Evaluation and calibration](docs/evaluation-and-calibration.md) — feedback routing, eval gates, KPIs
 - [Development plan](docs/development-plan.md) — environments, repo layout, CI/CD, workflow
-- [Feature roadmap](docs/feature-roadmap.md) — milestones M0–M10 and exit criteria
+- [Feature roadmap](docs/feature-roadmap.md) — milestones M0–M11 and exit criteria
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 

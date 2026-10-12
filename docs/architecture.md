@@ -52,6 +52,7 @@ human decision (review queue, case) or a **calibration pull request** that a hum
 | Component | Stage(s) | Tech | Runs on |
 |-----------|----------|------|---------|
 | `simulator` | 1 | Python, household TOML, scenario injectors, Parquet output | Mac mini (prod), laptop (dev) |
+| `ingest.cdc` (M5) | 1, 3 | Second-precision device events (simulator, later Home Assistant `state_changed`) | Mac mini |
 | `ingest.snapshots` | 1 | Parquet snapshot store, optional Home Assistant adapter | Mac mini |
 | `pipeline.changelog` | 2 | DuckDB typed diff + semantic rules | Mac mini |
 | `pipeline.events` | 3 | DuckDB → Postgres `change_event` | Mac mini |

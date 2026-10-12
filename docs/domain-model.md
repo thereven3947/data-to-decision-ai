@@ -15,6 +15,12 @@ and external drivers (weather, demand response).
 | MET / weather polygon | Weather + demand-response window | heat wave, utility DR event |
 | Daily asset snapshot | Periodic device snapshot | every 15 min (configurable) |
 | Change Control case | Case | "EV charger moved to garage circuit" |
+| Switch / breaker operation | Light switch on/off, garage door open/close | `garage_door` opened at 02:10 while `away_mode` |
+| Physical-security alarm | Ring camera motion / person detected | `ring_camera_front` person detected |
+| Customer call / trouble report | Ring doorbell ring | missed visitor at the front door |
+
+Fast-changing devices (cameras, doorbells, switches, garage door) are captured as a **CDC event
+stream** in addition to snapshots; see [roadmap M5](feature-roadmap.md#m5--event-native-devices-and-notifications).
 
 ## Household configuration
 
@@ -68,6 +74,23 @@ One row per device per snapshot run, stored as Parquet under `data/snapshots/run
 | `rssi_dbm`, `network_id` | int / string | connectivity |
 | `source` | string | `simulator`, `home_assistant` |
 
+## CDC event stream (stage 1, event-native devices, M5)
+
+One row per device state change, at second precision, under `data/cdc/`. Mirrors Home Assistant
+`state_changed` events, so the real adapter keeps the same schema.
+
+| Column | Example |
+|--------|---------|
+| `device_id` | `garage_door` |
+| `event` | `open`, `close`, `on`, `off`, `motion`, `person_detected`, `ring`, `answered`, `battery_low`, `offline` |
+| `value` | `"open"`, `"35"` (battery %), `null` |
+| `source` | `remote`, `app`, `button`, `automation`, `manual`, `device` |
+| `event_ts` | `2026-10-02T09:10:42Z` |
+
+Routine CDC events are not emitted as change events. Context rules (duration, policy zone,
+sequence) turn them into meaningful changes such as `garage_left_open`, `motion_while_away`,
+`missed_visitor`.
+
 ## Semantic changelog (stage 2)
 
 Typed diff of consecutive snapshots per device. Each row adds *meaning* from `config/semantics.toml`:
@@ -119,6 +142,10 @@ Defined in `config/categories.toml`; each category has a definition, examples an
 | `fault_degradation` | Equipment failure | Error codes, rising runtime per cycle, repeated offline |
 | `data_error` | Data error | Impossible values, clock jumps, duplicates |
 | `device_added_removed` | New service / retirement | Device appears or disappears without a matching replacement |
+| `security_event` | Intrusion / CCTV alarm | Motion or person detected while `away_mode` or in `quiet_hours` |
+| `access_left_open` | Abnormal switching state | Garage / door open longer than the configured threshold |
+| `visitor_activity` | Customer call | Doorbell ring + person detected; missed visitor; package delivery |
+| `lighting_change` | Switching plan change | Light automation changed; lights left on while away |
 | `abstain` | — | Classifier below per-class threshold → human review |
 
 ## Ontology (stage 9)

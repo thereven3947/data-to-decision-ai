@@ -23,27 +23,31 @@ title = "M4 · Mac mini & Postgres"
 
 [[milestone]]
 id = "M5"
-title = "M5 · HITL review"
+title = "M5 · Event-native devices & notifications"
 
 [[milestone]]
 id = "M6"
-title = "M6 · ML classifier"
+title = "M6 · HITL review"
 
 [[milestone]]
 id = "M7"
-title = "M7 · Enrichment & ontology"
+title = "M7 · ML classifier"
 
 [[milestone]]
 id = "M8"
-title = "M8 · Ontology API & UI"
+title = "M8 · Enrichment & ontology"
 
 [[milestone]]
 id = "M9"
-title = "M9 · Copilot agent"
+title = "M9 · Ontology API & UI"
 
 [[milestone]]
 id = "M10"
-title = "M10 · Feedback, calibration & KPIs"
+title = "M10 · Copilot agent"
+
+[[milestone]]
+id = "M11"
+title = "M11 · Feedback, calibration & KPIs"
 
 # --- done -------------------------------------------------------------------------------------
 [[issue]]
@@ -132,45 +136,96 @@ size = "S"
 tags = ["manual"]
 depends_on = ["M4-03"]
 
-# --- later (split into issues when the milestone starts) --------------------------------------
+# --- M5 event-native devices (see docs/feature-roadmap.md#m5--event-native-devices-and-notifications)
 [[issue]]
 id = "M5-01"
 milestone = "M5"
+title = "Simulator: Ring camera, Ring doorbell, light switches, garage door + CDC event stream"
+size = "M"
+depends_on = ["M2-03"]
+acceptance = [
+  "Devices declared in household.toml (kind, room, network, config attributes)",
+  "Second-precision CDC events written to data/cdc/ (device_id, event, value, source, ts)",
+  "Slow config (firmware, motion sensitivity, automations, auto-close timer) stays in snapshots",
+]
+
+[[issue]]
+id = "M5-02"
+milestone = "M5"
+title = "Stage 1-3: ingest CDC events as change events alongside the snapshot diff"
+size = "S"
+depends_on = ["M5-01"]
+acceptance = [
+  "Routine CDC events are not emitted (same idle/running principle as snapshots)",
+  "Event ids stay idempotent across snapshot and CDC sources",
+]
+
+[[issue]]
+id = "M5-03"
+milestone = "M5"
+title = "Context rules: duration, policy zone (away_mode, quiet_hours), sequence"
+size = "M"
+depends_on = ["M5-02"]
+acceptance = [
+  "garage open > 30 min, light on > 4 h while away, motion while away",
+  "doorbell ring -> person_detected -> no answer in 2 min = missed_visitor",
+  "Thresholds and windows live in config, not code",
+]
+
+[[issue]]
+id = "M5-04"
+milestone = "M5"
+title = "Scenarios + ground truth: package_delivery, garage_left_open_overnight, lights_left_on_away, motion_while_away, doorbell_battery_low, camera_offline, lighting_automation_changed"
+size = "M"
+depends_on = ["M5-03"]
+acceptance = ["d2d eval changelog recall 1.0 / precision 1.0 including CDC scenarios"]
+
+[[issue]]
+id = "M5-05"
+milestone = "M5"
+title = "Notification stories: severity (info/notice/alert), ntfy push, quiet hours, one push per story"
+size = "M"
+depends_on = ["M3-01", "M4-03", "M5-04"]
+
+# --- later (split into issues when the milestone starts) --------------------------------------
+[[issue]]
+id = "M6-01"
+milestone = "M6"
 title = "Review queue, cases and labeled training set"
 size = "L"
 depends_on = ["M3-01", "M4-02"]
 
 [[issue]]
-id = "M6-01"
-milestone = "M6"
-title = "Calibrated precision-first classifier with abstain"
-size = "L"
-depends_on = ["M5-01"]
-
-[[issue]]
 id = "M7-01"
 milestone = "M7"
-title = "Enrichment templates, impact calculators, ontology tables"
+title = "Calibrated precision-first classifier with abstain"
 size = "L"
 depends_on = ["M6-01"]
 
 [[issue]]
 id = "M8-01"
 milestone = "M8"
-title = "Ontology API with permissions + Change Control UI"
+title = "Enrichment templates, impact calculators, ontology tables"
 size = "L"
 depends_on = ["M7-01"]
 
 [[issue]]
 id = "M9-01"
 milestone = "M9"
-title = "Copilot agent: provider, tools, skills, grounding checker, llm-eval workflow"
+title = "Ontology API with permissions + Change Control UI"
 size = "L"
 depends_on = ["M8-01"]
 
 [[issue]]
 id = "M10-01"
 milestone = "M10"
-title = "Feedback routing, nightly calibration PRs, KPI dashboard"
+title = "Copilot agent: provider, tools, skills, grounding checker, llm-eval workflow"
 size = "L"
 depends_on = ["M9-01"]
+
+[[issue]]
+id = "M11-01"
+milestone = "M11"
+title = "Feedback routing, nightly calibration PRs, KPI dashboard"
+size = "L"
+depends_on = ["M10-01"]

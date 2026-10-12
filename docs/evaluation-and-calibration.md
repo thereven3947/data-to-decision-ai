@@ -67,7 +67,7 @@ CI split:
 
 ## KPIs (the "days → minutes" claim)
 
-Shown on the KPI dashboard (M10) and returned by `get_kpis`:
+Shown on the KPI dashboard (M11) and returned by `get_kpis`:
 
 | KPI | Definition | Human-analyst baseline (configured) | Target |
 |-----|------------|-------------------------------------|--------|
@@ -75,7 +75,7 @@ Shown on the KPI dashboard (M10) and returned by `get_kpis`:
 | Time to diagnose | story created → labeled (auto or human) | 2–3 days | < 5 min auto; < 1 day with review |
 | Time to action plan | labeled → action items proposed | 2–3 days | < 2 min |
 | Time to confirmed action | proposed → human confirmed | — | tracked |
-| Auto-label coverage | 1 − abstain rate | 0 | ≥ 70 % by M9 |
+| Auto-label coverage | 1 − abstain rate | 0 | ≥ 70 % by M10 |
 | Precision (auto labels) | vs human review | — | ≥ 0.90 per class |
 | Feedback correction rate | corrections / published stories | — | trending down |
 | Loop latency | feedback → merged calibration | — | ≤ 2 days |

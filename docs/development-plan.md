@@ -84,9 +84,9 @@ data-to-decision-ai/
 | Workflow | Trigger | Runner | Jobs |
 |----------|---------|--------|------|
 | `ci.yml` (M0-01) | PR / push | GitHub-hosted | ruff, mypy, pytest, docs/backlog link check; later vitest + deterministic evals |
-| `llm-eval.yml` (M9-01) | PR label `llm-eval`, nightly | self-hosted `mac-mini` | Golden conversation evals vs Ollama |
+| `llm-eval.yml` (M10-01) | PR label `llm-eval`, nightly | self-hosted `mac-mini` | Golden conversation evals vs Ollama |
 | `deploy.yml` (M4-03) | push to `main` | self-hosted `mac-mini`, environment `production` | build, migrate, `docker compose up -d`, smoke test, rollback on failure |
-| `calibrate.yml` (M10-01) | schedule 02:00 / manual | self-hosted `mac-mini` | calibration jobs → PRs |
+| `calibrate.yml` (M11-01) | schedule 02:00 / manual | self-hosted `mac-mini` | calibration jobs → PRs |
 
 Self-hosted runner safety: repo is **private**, runner only accepts jobs from this repo, and
 `pull_request` jobs from forks are disabled.
