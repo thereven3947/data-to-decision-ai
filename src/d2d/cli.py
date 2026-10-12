@@ -79,10 +79,19 @@ def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
 
 
 @eval_app.command("linking")
-def eval_linking(data_dir: DataDir = Path("data")) -> None:
-    """Report linking quality vs scenario ground truth (baseline; no gate yet)."""
-    for name, value in evaluate_linking(data_dir).items():
+def eval_linking(
+    data_dir: DataDir = Path("data"),
+    min_f1: Annotated[float, typer.Option(help="Gate: pairwise F1.")] = 0.9,
+    min_precision: Annotated[float, typer.Option(help="Gate: pairwise precision.")] = 1.0,
+) -> None:
+    """Score linking vs scenario ground truth; exit 1 if a gate fails."""
+    r = evaluate_linking(data_dir)
+    for name, value in r.items():
         typer.echo(f"{name:<15}{value:.3f}")
+    ok = r["pair_f1"] >= min_f1 and r["pair_precision"] >= min_precision
+    typer.echo("gate: PASS" if ok else "gate: FAIL")
+    if not ok:
+        raise typer.Exit(code=1)
 
 
 @eval_app.command("changelog")

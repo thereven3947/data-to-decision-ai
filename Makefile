@@ -18,8 +18,10 @@ check: lint type test
 	uv run d2d simulate --data-dir data/check
 	uv run d2d run --data-dir data/check
 	uv run d2d eval changelog --data-dir data/check
+	uv run d2d eval linking --data-dir data/check
 
 demo:
 	uv run d2d simulate
 	uv run d2d run
 	uv run d2d eval changelog
+	uv run d2d eval linking
