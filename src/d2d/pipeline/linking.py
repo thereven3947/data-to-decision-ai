@@ -20,6 +20,7 @@ class LinkingConfig:
     campaign_window: timedelta
     campaign_properties: frozenset[str]
     sha: str
+    recurrence_window: timedelta = timedelta(0)
 
 
 def load_linking(path: Path) -> LinkingConfig:
@@ -31,6 +32,7 @@ def load_linking(path: Path) -> LinkingConfig:
         campaign_window=timedelta(hours=int(w["campaign_hours"])),
         campaign_properties=frozenset(raw.get("campaign", {}).get("properties", [])),
         sha=hashlib.sha1(path.read_bytes()).hexdigest()[:12],
+        recurrence_window=timedelta(hours=int(w.get("recurrence_hours", 0))),
     )
 
 
@@ -85,6 +87,12 @@ def link_reason(
         and dt <= cfg.campaign_window
     ):
         return "campaign"
+    if (
+        a["device_id"] == b["device_id"]
+        and a["property"] == b["property"]
+        and dt <= cfg.recurrence_window
+    ):
+        return "recurrence"
     return None
 
 
@@ -95,7 +103,7 @@ def build_stories(
     topo = [topology.at(e["device_id"], e["event_ts"]) for e in events]
     uf = _UnionFind(len(events))
     reasons: dict[tuple[int, int], str] = {}
-    widest = max(cfg.device_window, cfg.topology_window, cfg.campaign_window)
+    widest = max(cfg.device_window, cfg.topology_window, cfg.campaign_window, cfg.recurrence_window)
     for i, a in enumerate(events):
         for j in range(i + 1, len(events)):
             b = events[j]

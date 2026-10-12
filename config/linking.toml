@@ -6,6 +6,7 @@
 device_minutes = 60      # same device
 topology_minutes = 30    # same circuit or same upstream network (router / hub)
 campaign_hours = 24      # same property set to the same new value on different devices
+recurrence_hours = 12    # same device + same property again (repeated fault, setting reverted)
 
 [campaign]
 properties = ["firmware_version"]
