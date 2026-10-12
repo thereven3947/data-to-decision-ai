@@ -17,6 +17,16 @@ off_peak = ["22:00", "06:00"]
 [data_quality]
 clock_skew_threshold_s = 300
 
+# --- context rules over the CDC stream (M5-03) ---------------------------------------------
+[[duration]]
+property = "door"
+value = "open"
+min_minutes = 30
+kinds = ["garage_door"]
+change_kind = "operational"
+tag = "garage_left_open"
+# "light left on > 4 h" needs away-mode context (policy-zone rules), so it is not enabled yet.
+
 # --- data quality (emitted on onset only) ---------------------------------------------------
 [[rule]]
 property = "dq.negative_energy_delta"

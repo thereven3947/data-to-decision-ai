@@ -28,10 +28,23 @@ class Rule:
 
 
 @dataclass(frozen=True)
+class DurationRule:
+    """CDC state held at least ``min_minutes`` (e.g. garage door left open)."""
+
+    property: str
+    value: str
+    min_minutes: int
+    change_kind: str
+    tag: str
+    kinds: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Semantics:
     rules: tuple[Rule, ...]
     windows: dict[str, tuple[str, str]]
     clock_skew_threshold_s: int = 300
+    durations: tuple[DurationRule, ...] = ()
 
     def classify(self, prop: str, old: str | None, new: str | None) -> tuple[str, str] | None:
         """Return ``(change_kind, semantic_tag)`` of the first matching rule, else None."""
@@ -96,8 +109,15 @@ def load_semantics(path: Path) -> Semantics:
     windows = {name: (str(v[0]), str(v[1])) for name, v in raw.get("windows", {}).items()}
     rules = tuple(_rule(r, windows) for r in raw.get("rule", []))
     dq = raw.get("data_quality", {})
+    durations = tuple(
+        DurationRule(**{**d, "kinds": tuple(d.get("kinds", ()))}) for d in raw.get("duration", [])
+    )
+    for d in durations:
+        if d.change_kind not in CHANGE_KINDS:
+            raise ConfigError(f"duration {d.tag!r}: unknown change_kind {d.change_kind!r}")
     return Semantics(
         rules=rules,
         windows=windows,
         clock_skew_threshold_s=int(dq.get("clock_skew_threshold_s", 300)),
+        durations=durations,
     )

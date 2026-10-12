@@ -12,6 +12,7 @@ import pyarrow.parquet as pq
 
 from d2d.pipeline.cdc import cdc_changes, load_cdc
 from d2d.pipeline.changelog import Change, build_changelog
+from d2d.pipeline.context import duration_changes
 from d2d.pipeline.linking import LinkingConfig, TopologyIndex, build_stories
 from d2d.pipeline.semantics import Semantics
 from d2d.pipeline.snapshots import load_snapshots
@@ -94,7 +95,14 @@ def run_pipeline(
 ) -> RunSummary:
     """Full recompute of stages 2-4 from all snapshots (idempotent)."""
     rows = load_snapshots(data_dir)
-    changes = build_changelog(rows, semantics) + cdc_changes(load_cdc(data_dir), semantics)
+    cdc_rows = load_cdc(data_dir)
+    kinds = {r["device_id"]: r["kind"] for r in rows}
+    until = max((r["snapshot_ts"] for r in rows), default=None)
+    changes = (
+        build_changelog(rows, semantics)
+        + cdc_changes(cdc_rows, semantics)
+        + duration_changes(cdc_rows, list(semantics.durations), kinds, until)
+    )
     changes.sort(key=lambda c: (c.snapshot_ts_after, c.device_id, c.property))
     events = to_events(changes)
     stories = build_stories(events, TopologyIndex(rows), linking, home_id)
