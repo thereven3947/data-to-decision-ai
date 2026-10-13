@@ -73,7 +73,7 @@ flowchart TB
   subgraph GH["GitHub"]
     REPO["Repo + Issues/Milestones"]
     CI["Actions: lint · test · deterministic evals<br/>(GitHub-hosted)"]
-    ENV["Environment: production<br/>(required reviewer)"]
+    ENV["deploy workflow<br/>staging auto · production on Run workflow click"]
     REL["Releases: model artifacts"]
   end
 

@@ -73,7 +73,9 @@ data-to-decision-ai/
 
 ## Branching and PR workflow
 
-- `main` is always deployable; protected (PR required, CI green).
+- `main` is always deployable. The repo is private on GitHub Free, so branch protection and required
+  reviewers are unavailable: keep `ci` green before merging, and production deploys only on a manual
+  **Run workflow** click (see [deployment.md](deployment.md)).
 - Feature branches: `feat/<issue-id>-<slug>` (e.g. `feat/M1-02-simulator-core`).
 - Calibration branches (opened by bots): `calibration/<layer>/<yyyy-mm-dd>`.
 - Conventional commits; PR title starts with the issue ID: `[M1-02] Simulator core`.
@@ -85,7 +87,7 @@ data-to-decision-ai/
 |----------|---------|--------|------|
 | `ci.yml` (M0-01) | PR / push | GitHub-hosted | ruff, mypy, pytest, docs/backlog link check; later vitest + deterministic evals |
 | `llm-eval.yml` (M10-01) | PR label `llm-eval`, nightly | self-hosted `mac-mini` | Golden conversation evals vs Ollama |
-| `deploy.yml` (M4-03) | push to `main` | self-hosted `mac-mini`, environment `production` | build, migrate, `docker compose up -d`, smoke test, rollback on failure |
+| `deploy.yml` (M4-03) | `ci` green on `main` → staging; Run workflow → production | self-hosted `mac-mini`, environments `staging` / `production` | build, smoke test, `docker compose up -d`, migrate, pipeline run, launchd agent, rollback on failure |
 | `calibrate.yml` (M11-01) | schedule 02:00 / manual | self-hosted `mac-mini` | calibration jobs → PRs |
 
 Self-hosted runner safety: repo is **private**, runner only accepts jobs from this repo, and

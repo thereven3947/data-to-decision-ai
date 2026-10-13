@@ -129,7 +129,13 @@ id = "M4-03"
 milestone = "M4"
 title = "Self-hosted runner + deploy workflow + launchd pipeline schedule"
 size = "M"
+status = "done"
 depends_on = ["M4-01"]
+acceptance = [
+  "Runner mac-mini online; ci green on main deploys staging, Run workflow deploys production",
+  "Failed deploy rolls back to the previous release",
+  "launchd runs the pipeline every cadence_minutes per environment (docs/deployment.md)",
+]
 
 [[issue]]
 id = "M4-04"

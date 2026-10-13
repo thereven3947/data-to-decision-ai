@@ -10,6 +10,7 @@ import typer
 from d2d import __version__
 from d2d.config import config_dir, load_household, load_pipeline, parse_utc
 from d2d.evaluation import evaluate_changelog, evaluate_linking
+from d2d.ops import pipeline_plist
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
@@ -85,6 +86,21 @@ def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
     typer.echo(f"{s.snapshot_rows} snapshot rows -> {s.changes} changes -> {s.events} events")
     typer.echo(f"by kind: {kinds}")
     typer.echo(f"{s.stories} change stories")
+
+
+@app.command("launchd-plist")
+def launchd_plist(
+    env: Annotated[str, typer.Option(help="Environment: staging or production.")],
+    env_dir: Annotated[Path, typer.Option(help="Environment root, e.g. ~/d2d/production.")],
+    config: ConfigDir = None,
+) -> None:
+    """Print the launchd agent that runs the pipeline every cadence_minutes (pipeline.toml)."""
+    pipeline = load_pipeline(config_dir(config) / "pipeline.toml")
+    try:
+        xml = pipeline_plist(env, env_dir, pipeline.cadence_minutes)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(xml.decode("utf-8"), nl=False)
 
 
 @eval_app.command("linking")

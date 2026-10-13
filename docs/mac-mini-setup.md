@@ -141,5 +141,5 @@ Generate values with `openssl rand -hex 32`. Never commit `.env`.
 - [x] `.env` exists with real secrets
 - [ ] Optional: SSH / Tailscale reach the Mac mini remotely
 
-Next: M4-03 (self-hosted runner, deploy workflow, staging + production compose projects),
-then M4-02 (Postgres + Alembic), then M4-04 (Cloudflare Tunnel + Access).
+Next: M4-03 (self-hosted runner, deploy workflow, staging + production compose projects; see
+[deployment.md](deployment.md)), then M4-02 (Postgres + Alembic), then M4-04 (Cloudflare Tunnel + Access).

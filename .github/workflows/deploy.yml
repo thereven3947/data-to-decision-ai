@@ -1,0 +1,41 @@
+name: deploy
+
+# Staging: automatic after ci passes on a push to main.
+# Production: the approval click is "Run workflow" (GitHub Free private repos cannot require
+# reviewers on an environment). Both environments only accept deployments from main.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [production, staging]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: [self-hosted, macOS, ARM64, mac-mini]
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      TARGET: ${{ inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - run: deploy/deploy.sh "$TARGET"
