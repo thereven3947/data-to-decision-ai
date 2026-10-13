@@ -6,6 +6,11 @@ set -euo pipefail
 ENV_DIR=${1:?usage: pipeline.sh <env_dir>}
 cd "$ENV_DIR/current"
 echo "== $(date -u +%FT%TZ) pipeline $(basename "$ENV_DIR") $(cat REVISION 2>/dev/null || echo unknown)"
+# Database credentials (POSTGRES_PASSWORD, D2D_PG_PORT) for `d2d load`.
+set -a
+. "$ENV_DIR/.env"
+set +a
 # No live device feed yet: the simulator regenerates the household before each run.
 .venv/bin/d2d simulate --data-dir "$ENV_DIR/data"
 .venv/bin/d2d run --data-dir "$ENV_DIR/data"
+.venv/bin/d2d load --data-dir "$ENV_DIR/data"

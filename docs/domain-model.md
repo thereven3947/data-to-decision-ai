@@ -113,6 +113,12 @@ device IDs, unit changes. These become `data_quality` changes and feed the **dat
 `ontology.change_event(event_id, device_id, property, old_value, new_value, change_kind, semantic_tag,
 event_ts, snapshot_run_id)` — one row per changelog row, idempotent on `(device_id, property, event_ts)`.
 
+`d2d load` (M4-02) writes the output of `d2d run` to Postgres in one transaction: `ontology.device`
+(from `household.toml`), `ontology.change_event` (append-only upsert), `ontology.change_story` and
+`ontology.change_story_event` (story ↔ event). Stories are recomputed on every run, so a story that is
+no longer produced is removed only while its `status` is still `new`. The schema is managed by Alembic
+([migrations/alembic](../migrations/alembic)).
+
 ## Event linking → change story (stage 4)
 
 Events are nodes; edges are added when two events share:

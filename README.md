@@ -70,6 +70,8 @@ uv sync
 uv run d2d simulate          # 3 days of 15-min snapshots + 12 planted scenarios -> data/
 uv run d2d run               # stages 2-3: semantic changelog + change events
 uv run d2d eval changelog    # score events vs ground truth (exit 1 if a gate fails)
+uv run alembic upgrade head  # optional: Postgres schema (needs D2D_DATABASE_URL, see .env.example)
+uv run d2d load              # optional: devices, change events and stories -> Postgres ontology.*
 ```
 
 Create the GitHub milestones and issues from the backlog (idempotent, safe to re-run):

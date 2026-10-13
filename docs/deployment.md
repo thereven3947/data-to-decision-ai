@@ -13,7 +13,8 @@ the click replaces the environment reviewer; both environments only accept deplo
 | Workflow | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml) | `workflow_run` after `ci` → staging; `workflow_dispatch` → production (or staging) |
 | Deploy script | [deploy/deploy.sh](../deploy/deploy.sh) | Build release → smoke test → switch → compose up → migrate → pipeline run → launchd agent, rollback on failure |
 | Services | [deploy/docker-compose.yml](../deploy/docker-compose.yml) | Postgres 16 per environment (compose project `d2d-<env>`, localhost only) |
-| Schedule | launchd agent `com.d2d.pipeline.<env>` from `d2d launchd-plist` | Runs [deploy/pipeline.sh](../deploy/pipeline.sh) every `cadence_minutes` (`config/pipeline.toml`, 15 min) |
+| Schema | [migrations/alembic](../migrations/alembic) via [alembic.ini](../alembic.ini) | `ontology.device`, `change_event`, `change_story`, `change_story_event` (M4-02) |
+| Schedule | launchd agent `com.d2d.pipeline.<env>` from `d2d launchd-plist` | Runs [deploy/pipeline.sh](../deploy/pipeline.sh) (`simulate` → `run` → `load`) every `cadence_minutes` (`config/pipeline.toml`, 15 min) |
 
 ## Layout per environment
 
@@ -31,10 +32,12 @@ the click replaces the environment reviewer; both environments only accept deplo
 1. `git archive` the commit into a new release, `uv sync --locked --no-dev`.
 2. Smoke test: `d2d simulate` → `d2d run` → both eval gates on a temp dir. A failure stops here; the
    running release is untouched.
-3. Point `current` at the new release, `docker compose up -d --wait`, `alembic upgrade head` (once
-   M4-02 adds `alembic.ini`), one pipeline run against `~/d2d/<env>/data`, reinstall the launchd agent.
+3. Point `current` at the new release, `docker compose up -d --wait`, `alembic upgrade head` (URL from
+   the environment `.env`: `POSTGRES_PASSWORD`, `D2D_PG_PORT`), one pipeline run against
+   `~/d2d/<env>/data` that also loads Postgres (`d2d load`), reinstall the launchd agent.
 4. If step 3 fails, `current` is pointed back at the previous release and step 3 is repeated for it;
-   the job still fails so the run is red in GitHub.
+   the job still fails so the run is red in GitHub. Migrations are not rolled back: every migration
+   must keep the previous release working (add columns/tables, do not drop or rename in one step).
 
 ## One-time setup (done on this Mac mini)
 
@@ -60,6 +63,9 @@ deploy/deploy.sh staging                                  # manual deploy of the
 tail -f ~/d2d/production/logs/pipeline.log                # scheduled runs
 launchctl print gui/$(id -u)/com.d2d.pipeline.production  # agent state, last exit code
 docker compose -p d2d-production ps                       # Postgres
+docker compose -p d2d-production exec postgres psql -U d2d -d d2d \
+  -c "select status, count(*) from ontology.change_story group by 1"   # loaded stories
+(cd ~/d2d/production/current && set -a && . ~/d2d/production/.env && .venv/bin/alembic current)  # schema version
 ~/actions-runner/svc.sh status                            # runner
 ```
 

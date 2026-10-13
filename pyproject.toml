@@ -5,8 +5,11 @@ description = "Data to Decision with AI: closed-loop change intelligence (smart-
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.13",
   "duckdb>=1.1",
+  "psycopg[binary]>=3.2",
   "pyarrow>=17",
+  "sqlalchemy>=2.0",
   "typer>=0.12",
   "tzdata>=2024.1",
 ]

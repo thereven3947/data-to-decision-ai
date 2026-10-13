@@ -8,6 +8,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: d2d
+          POSTGRES_USER: d2d
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U d2d -d d2d" --health-interval 5s --health-timeout 3s
+          --health-retries 20
+    env:
+      D2D_TEST_DATABASE_URL: postgresql+psycopg://d2d:ci@localhost:5432/d2d
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -23,3 +36,11 @@ jobs:
       - run: uv run d2d run --data-dir data/check
       - run: uv run d2d eval changelog --data-dir data/check
       - run: uv run d2d eval linking --data-dir data/check
+      - name: migrate and load into Postgres
+        env:
+          D2D_DATABASE_URL: postgresql+psycopg://d2d:ci@localhost:5432/d2d
+        run: |
+          uv run alembic upgrade head
+          uv run d2d load --data-dir data/check
+          uv run d2d load --data-dir data/check
+          uv run alembic downgrade base

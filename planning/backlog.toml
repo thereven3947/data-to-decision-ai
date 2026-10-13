@@ -122,7 +122,14 @@ id = "M4-02"
 milestone = "M4"
 title = "Postgres schema + Alembic migrations; load change events"
 size = "M"
+status = "done"
 depends_on = ["M2-03", "M4-01"]
+acceptance = [
+  "Alembic migration creates ontology.device, change_event, change_story, change_story_event",
+  "deploy.sh runs `alembic upgrade head`; the scheduled pipeline runs `d2d load` after `d2d run`",
+  "Load is idempotent; stories past status `new` survive a reload",
+  "CI runs the migration, load and Postgres integration tests against a service container",
+]
 
 [[issue]]
 id = "M4-03"

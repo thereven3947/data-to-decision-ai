@@ -37,7 +37,7 @@ Postgres + API + web ≈ 2 GB → ~16 GB headroom for macOS and training.
 | API | FastAPI + Pydantic v2, SSE for chat streaming |
 | Web | Vite + React + TypeScript, TanStack Query, generated OpenAPI client |
 | LLM | OpenAI-compatible client → Ollama (default) / Anthropic (optional) |
-| CLI | `d2d` (Typer): `simulate`, `run`, `review`, `train`, `calibrate`, `eval` |
+| CLI | `d2d` (Typer): `simulate`, `run`, `load`, `review`, `train`, `calibrate`, `eval` |
 | Notifications | ntfy (self-hosted topic) for new high-severity stories |
 
 ## Target repository layout

@@ -6,9 +6,14 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
-from d2d.config import config_dir, load_household, load_pipeline, parse_utc
+from d2d.config import ConfigError, config_dir, load_household, load_pipeline, parse_utc
+from d2d.db import LoadError, load_run
+from d2d.db import database_url as default_url
 from d2d.evaluation import evaluate_changelog, evaluate_linking
 from d2d.ops import pipeline_plist
 from d2d.pipeline.events import run_pipeline
@@ -86,6 +91,35 @@ def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
     typer.echo(f"{s.snapshot_rows} snapshot rows -> {s.changes} changes -> {s.events} events")
     typer.echo(f"by kind: {kinds}")
     typer.echo(f"{s.stories} change stories")
+
+
+@app.command()
+def load(
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option(help="SQLAlchemy URL (default D2D_DATABASE_URL or the deploy .env keys)."),
+    ] = None,
+) -> None:
+    """Load devices, change events and change stories from `d2d run` into Postgres."""
+    household = load_household(config_dir(config) / "household.toml")
+    try:
+        url = make_url(database_url) if database_url else default_url()
+    except ConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    engine = create_engine(url)
+    try:
+        s = load_run(engine, data_dir, household)
+    except (LoadError, SQLAlchemyError) as exc:
+        typer.echo(f"load failed: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    finally:
+        engine.dispose()
+    typer.echo(
+        f"{s.devices} devices, {s.events} events, {s.stories} stories -> "
+        f"{url.render_as_string(hide_password=True)} ({s.stories_removed} stale stories removed)"
+    )
 
 
 @app.command("launchd-plist")
