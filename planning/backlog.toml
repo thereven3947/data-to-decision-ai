@@ -113,6 +113,7 @@ id = "M4-01"
 milestone = "M4"
 title = "Mac mini base setup (Homebrew, uv, OrbStack, Ollama, Tailscale)"
 size = "S"
+status = "done"
 tags = ["manual"]
 acceptance = ["All 'Done when' boxes in docs/mac-mini-setup.md are ticked"]
 
