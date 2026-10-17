@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { api, IS_DEMO, ROLES, type Health, type Meta, type Role, type SessionUser } from './api'
+import { api, IS_DEMO, LIVE_URL, ROLES, type Health, type Meta, type Role, type SessionUser } from './api'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { FeedbackWidget } from './components/Feedback'
 import { humanize } from './format'
@@ -90,10 +90,20 @@ export default function App({ role, onRoleChange, canSwitch, user, onLogout }: P
           <span className={`dot ${health.data?.llm_available ? 'ok' : 'warn'}`} />
           {health.data?.llm ? `${health.data.llm}${health.data.llm_available ? '' : ' (offline)'}` : 'LLM off'}
         </div>
+        {IS_DEMO && (
+          <div className="live-cta">
+            {LIVE_URL ? (
+              <a className="button" href={`${LIVE_URL}/`} rel="noopener">Sign in to the live beta →</a>
+            ) : (
+              <span className="muted small">Live beta: invite only, currently offline</span>
+            )}
+            <small>Invite-only accounts. Ask the Copilot anything, running on a local LLM.</small>
+          </div>
+        )}
         {IS_DEMO ? (
           <p className="toy-note demo-note">
             <strong>Static demo</strong> on GitHub Pages: a read-only snapshot of simulated toy data with recorded
-            Copilot answers. It never connects to the private beta.{' '}
+            Copilot answers. This page never contacts the live beta; the button above opens it.{' '}
             <a href="https://github.com/thereven3947/data-to-decision-ai">Source on GitHub</a>
           </p>
         ) : (

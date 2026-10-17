@@ -8,3 +8,11 @@ timeout_s = 180
 num_ctx = 8192
 temperature = 0.2
 max_tool_calls = 6
+
+# Copilot guard: the local LLM uses the Mac mini's GPU, so answers are rationed once the live beta
+# is reachable from the internet. The owner is exempt from the hourly quota.
+[limits]
+per_user_per_hour = 30   # questions per account in any rolling hour
+max_concurrent = 1       # answers generated at the same time
+max_waiting = 2          # queued questions; more get "busy, try again shortly"
+owner_exempt = true

@@ -111,24 +111,65 @@ Ollama). The demo has no server and never contacts the Mac mini.
 
 ## Remote access to the live beta (M4-04, optional)
 
-Do not point a public website at the Mac mini's API: that would need the API open to the whole
-internet, cross-site cookies or tokens in the browser, and CORS, which weakens every protection
-above. To use the live app from your phone or laptop, publish the **same-origin** app through a
-Cloudflare Tunnel with Cloudflare Access in front:
+The public demo on GitHub Pages has a **Sign in to the live beta** button. It is a plain link to the
+live app served by the Mac mini (same origin, so the strict cookie and CORS rules stay on); the
+GitHub page itself never talks to the Mac. The link appears once the repository variable
+`D2D_LIVE_URL` is set (Settings → Secrets and variables → Actions → **Variables**) and the `pages`
+workflow runs again.
 
-1. Create a Cloudflare account, add a domain you own, and in Zero Trust create an **Access
-   application** for `beta.<your-domain>` with a policy that allows only your email (one-time PIN or
-   GitHub/Google login). Free for personal use.
-2. On the Mac mini: `brew install cloudflared`, `cloudflared tunnel login`,
-   `cloudflared tunnel create d2d`, `cloudflared tunnel route dns d2d beta.<your-domain>`, then a
-   `~/.cloudflared/config.yml` with an ingress rule `hostname: beta.<your-domain>` ->
-   `service: http://127.0.0.1:8080`, and `sudo cloudflared service install`.
-3. Add `D2D_ALLOWED_HOSTS=127.0.0.1,localhost,beta.<your-domain>` to `~/d2d/production/.env` and
-   restart the API. Cookies switch to `Secure` automatically over HTTPS, and sign-in lockouts use the
-   visitor address Cloudflare reports.
+| Option | Cost | Stable address | Notes |
+|--------|------|----------------|-------|
+| **Tailscale Funnel** (recommended) | $0 (Personal plan) | `https://<mac>.<tailnet>.ts.net` | No domain needed; HTTPS certificate included; ports 443/8443/10000 only |
+| Cloudflare Tunnel + Access | $0 for the tunnel, but needs a domain (~$10/year) | `https://beta.<your-domain>` | Adds an email login in front of the app |
+| Cloudflare quick tunnel | $0 | No: random URL, changes on every restart | Testing only |
+| ngrok free | $0 | One static domain | Shows an ngrok warning page to visitors; monthly bandwidth cap |
 
-The Mac mini opens no inbound ports. Traffic must pass Cloudflare Access first and then the app's own
-login; Access also absorbs scanning and password guessing before it reaches the Mac.
+### Tailscale Funnel ($0)
+
+1. Install Tailscale on the Mac mini (https://tailscale.com/download/mac) and sign in. In the admin
+   console enable **MagicDNS** and **HTTPS certificates** (DNS page); `tailscale funnel` asks to add
+   the Funnel permission to your policy the first time.
+2. Publish the production app (only this port, nothing else on the Mac):
+   ```bash
+   tailscale funnel --bg 8080        # prints https://<mac>.<tailnet>.ts.net
+   tailscale funnel status           # check; `tailscale funnel --https=443 off` to stop
+   ```
+3. Tell the app its public name, then restart it:
+   ```bash
+   cat >> ~/d2d/production/.env <<'ENV'
+   D2D_ALLOWED_HOSTS=127.0.0.1,localhost,<mac>.<tailnet>.ts.net
+   D2D_SECURE_COOKIES=on
+   ENV
+   launchctl kickstart -k gui/$(id -u)/com.d2d.api.production
+   ```
+4. Set the repository variable `D2D_LIVE_URL=https://<mac>.<tailnet>.ts.net` and re-run the
+   `pages` workflow (Actions → pages → Run workflow). The button appears on the public demo.
+5. Invite testers: `d2d user add <name> --role guest --env production` (see the local runbook).
+
+### What is exposed and how it is protected
+
+With Funnel on, the sign-in page of the live app is on the public internet. Protections:
+invite-only accounts (no sign-up, `config/roles.toml` `[accounts]`), scrypt-hashed passwords,
+5 failed logins per account or visitor address lock sign-in for 15 minutes, every `/api` route
+except health and sign-in needs a session, HTTPS with `Secure` cookies and HSTS, strict security
+headers, and the **Copilot guard** in `config/llm.toml` (`[limits]`: 30 questions per account per
+hour, one answer at a time, at most two waiting; the owner is exempt from the quota). Guests only
+see published stories for shared rooms and cannot label, open cases or see Insights.
+
+Turn it off at any time with `tailscale funnel --https=443 off` (and clear `D2D_LIVE_URL` to hide
+the button).
+
+### Cloudflare Tunnel + Access (if you own a domain)
+
+1. In Cloudflare Zero Trust create an **Access application** for `beta.<your-domain>` allowing
+   only the emails you invite (one-time PIN or GitHub/Google login).
+2. `brew install cloudflared`, `cloudflared tunnel login`, `cloudflared tunnel create d2d`,
+   `cloudflared tunnel route dns d2d beta.<your-domain>`, a `~/.cloudflared/config.yml` ingress rule
+   `hostname: beta.<your-domain>` -> `service: http://127.0.0.1:8080`, then
+   `sudo cloudflared service install`.
+3. Same `.env` lines as above with `beta.<your-domain>`, and `D2D_LIVE_URL=https://beta.<your-domain>`.
+
+The Mac mini opens no inbound ports in either setup; never use router port forwarding.
 
 Optional `.env` keys: `D2D_API_PORT` (default 8080 production, 8081 staging), `D2D_LLM_MODEL`
 (default `qwen3:14b` from `config/llm.toml`), `D2D_LLM=off` (grounded fallback answers, no LLM).

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -103,26 +104,28 @@ def test_auth_from_env(tmp_path: Path) -> None:
     assert cfg is not None and cfg.signer.ttl == 7200 and cfg.users.path == tmp_path / "u.toml"
 
 
-def test_user_cli_blocks_extra_accounts_by_default(tmp_path: Path) -> None:
+def test_user_cli_enforces_invite_policy(tmp_path: Path) -> None:
     runner = CliRunner()
     f = str(tmp_path / "users.toml")
     cfg = ["--config", str(ROOT / "config")]
-    add = ["user", "add", "--users-file", f, "--password-stdin", *cfg]
-    assert runner.invoke(app, [*add[:2], "me", *add[2:]], input=PW + "\n").exit_code == 0
-    second = runner.invoke(app, [*add[:2], "friend", *add[2:]], input=PW + "\n")
-    assert second.exit_code == 1 and "user limit reached" in second.output
-    guest = runner.invoke(app, [*add[:2], "me", "--role", "guest", *add[2:]], input=PW + "\n")
-    assert guest.exit_code == 1 and "not allowed" in guest.output
-    # Changing your own password is still allowed.
-    assert (
-        runner.invoke(
+
+    def add(name: str, role: str) -> Any:
+        return runner.invoke(
             app,
-            ["user", "passwd", "me", "--users-file", f, "--password-stdin", *cfg],
-            input=PW + "x\n",
-        ).exit_code
-        == 0
-    )
-    assert len(UsersFile(Path(f)).users()) == 1
+            ["user", "add", name, "--role", role, "--users-file", f, "--password-stdin", *cfg],
+            input=PW + "\n",
+        )
+
+    assert add("me", "owner").exit_code == 0
+    family = add("aunt", "family")
+    assert family.exit_code == 1 and "not allowed" in family.output
+    for i in range(5):
+        assert add(f"tester{i}", "guest").exit_code == 0
+    extra = add("tester5", "guest")
+    assert extra.exit_code == 1 and "user limit reached" in extra.output
+    passwd = ["user", "passwd", "tester0", "--users-file", f, "--password-stdin", *cfg]
+    assert runner.invoke(app, passwd, input=PW + "x\n").exit_code == 0
+    assert len(UsersFile(Path(f)).users()) == 6
 
 
 def test_user_cli(tmp_path: Path) -> None:
@@ -158,8 +161,10 @@ def test_user_cli(tmp_path: Path) -> None:
 
 
 def test_account_policy() -> None:
-    policy = load_account_policy(ROOT / "config" / "roles.toml")
-    assert policy == AccountPolicy(max_users=1, roles=("owner",))
+    assert load_account_policy(ROOT / "config" / "roles.toml") == AccountPolicy(
+        max_users=6, roles=("owner", "guest")
+    )
+    policy = AccountPolicy(max_users=1, roles=("owner",))
     policy.check_new({}, "me", "owner")
     policy.check_new({"me": "owner"}, "me", "owner")  # replacing yourself is fine
     with pytest.raises(ConfigError, match="limit"):
@@ -201,3 +206,52 @@ def test_client_address_trusts_cloudflare_header_only_from_loopback() -> None:
         client_address(req("198.51.100.7", {"CF-Connecting-IP": "203.0.113.9"})) == "198.51.100.7"
     )
     assert client_address(req("127.0.0.1", {})) == "127.0.0.1"
+
+
+def test_chat_guard_quota_and_busy() -> None:
+    import threading
+
+    from d2d.api.guard import ChatGuard, ChatLimits, GuardRefused, load_limits
+
+    assert load_limits(ROOT / "config" / "llm.toml") == ChatLimits(30, 1, 2, True)
+    g = ChatGuard(ChatLimits(per_user_per_hour=2, max_concurrent=1, max_waiting=0))
+    g.check_quota("user:g", exempt=False, now=0)
+    g.check_quota("user:g", exempt=False, now=10)
+    with pytest.raises(GuardRefused) as exc:
+        g.check_quota("user:g", exempt=False, now=20)
+    assert exc.value.reason == "quota" and exc.value.retry_after > 3000
+    g.check_quota("user:g", exempt=False, now=3601)  # window rolled
+    for _ in range(5):
+        g.check_quota("user:owner", exempt=True, now=0)  # owner exempt
+
+    entered, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with g:
+            entered.set()
+            release.wait(5)
+
+    t = threading.Thread(target=hold)
+    t.start()
+    entered.wait(5)
+    with pytest.raises(GuardRefused) as busy, g:
+        pass
+    assert busy.value.reason == "busy"
+    release.set()
+    t.join()
+    with g:  # free again
+        pass
+
+
+def test_client_address_uses_forwarded_for_from_local_proxy_only() -> None:
+    from starlette.requests import Request
+
+    from d2d.api.main import client_address
+
+    def req(peer: str, headers: dict[str, str]) -> Request:
+        raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        return Request({"type": "http", "client": (peer, 1), "headers": raw})
+
+    spoof = {"X-Forwarded-For": "1.1.1.1, 203.0.113.5"}
+    assert client_address(req("127.0.0.1", spoof)) == "203.0.113.5"  # last hop = proxy's view
+    assert client_address(req("198.51.100.7", spoof)) == "198.51.100.7"

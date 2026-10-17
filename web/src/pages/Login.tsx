@@ -49,7 +49,7 @@ export default function Login({ usersConfigured, onLoggedIn }: { usersConfigured
         </label>
         {error && <p className="error small" role="alert">{error}</p>}
         <button type="submit" disabled={busy || !username || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
-        <p className="muted small">Private beta: owner access only. Toy data; no real devices or company systems.</p>
+        <p className="muted small">Invite-only beta: accounts are created by the owner, there is no sign-up. Toy data; no real devices or company systems.</p>
       </form>
     </div>
   )

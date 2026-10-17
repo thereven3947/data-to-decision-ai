@@ -19,6 +19,7 @@ from d2d import __version__
 from d2d.agent.provider import OllamaProvider, Provider, load_llm
 from d2d.agent.runtime import Agent
 from d2d.agent.skills import load_skills
+from d2d.api.guard import ChatGuard, ChatLimits, GuardRefused, load_limits
 from d2d.api.insights import insights
 from d2d.api.repo import Ontology
 from d2d.api.scope import (
@@ -46,6 +47,7 @@ class AppContext:
     provider: Provider | None
     auth: AuthConfig | None = None
     accounts: AccountPolicy = field(default_factory=lambda: AccountPolicy(1, ("owner",)))
+    guard: ChatGuard = field(default_factory=lambda: ChatGuard(ChatLimits()))
 
 
 def build_context(
@@ -64,7 +66,10 @@ def build_context(
     max_calls = load_llm(cfg_dir / "llm.toml").max_tool_calls
     agent = Agent(onto, provider, load_skills(skills_dir), max_calls)
     policy = accounts or load_account_policy(cfg_dir / "roles.toml")
-    return AppContext(onto, load_roles(cfg_dir / "roles.toml"), agent, provider, auth, policy)
+    guard = ChatGuard(load_limits(cfg_dir / "llm.toml"))
+    return AppContext(
+        onto, load_roles(cfg_dir / "roles.toml"), agent, provider, auth, policy, guard
+    )
 
 
 def default_context() -> AppContext:
@@ -163,12 +168,17 @@ S = Annotated[Scope, Depends(get_scope)]
 
 
 def client_address(request: Request) -> str:
-    """The visitor's address. Behind Cloudflare Tunnel every request arrives from cloudflared on
-    127.0.0.1, so the address Cloudflare saw is used instead (only trusted from loopback)."""
+    """The visitor's address. Behind a local tunnel (Tailscale Funnel, Cloudflare Tunnel) every
+    request arrives from 127.0.0.1, so the address the tunnel reports is used instead. Those
+    headers are only trusted from loopback; the API never listens on other interfaces."""
     peer = request.client.host if request.client else "unknown"
-    forwarded = request.headers.get("cf-connecting-ip")
-    if forwarded and peer in ("127.0.0.1", "::1"):
-        return forwarded.strip()
+    if peer not in ("127.0.0.1", "::1"):
+        return peer
+    if cf := request.headers.get("cf-connecting-ip"):
+        return cf.strip()
+    if xff := request.headers.get("x-forwarded-for"):
+        # The local proxy appends the address it saw last.
+        return xff.split(",")[-1].strip()
     return peer
 
 
@@ -226,6 +236,8 @@ def create_app(
         response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
+        if os.environ.get("D2D_SECURE_COOKIES") == "on":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         return response
 
     @app.get("/api/health")
@@ -249,7 +261,11 @@ def create_app(
         }
 
     def secure_cookie(request: Request) -> bool:
-        return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+        return (
+            os.environ.get("D2D_SECURE_COOKIES") == "on"
+            or request.url.scheme == "https"
+            or request.headers.get("x-forwarded-proto") == "https"
+        )
 
     @app.get("/api/auth/status")
     def auth_status(c: Ctx, request: Request) -> dict[str, Any]:
@@ -395,7 +411,18 @@ def create_app(
         return c.onto.kpis(s)
 
     @app.post("/api/chat")
-    def chat(c: Ctx, s: S, body: ChatIn) -> dict[str, Any]:
+    def chat(c: Ctx, s: S, request: Request, body: ChatIn) -> dict[str, Any]:
+        key = f"user:{s.username}" if s.username else f"ip:{client_address(request)}"
+        try:
+            c.guard.check_quota(key, exempt=s.role == "owner" and s.username is not None)
+            with c.guard:
+                return answer_chat(c, s, body)
+        except GuardRefused as exc:
+            raise HTTPException(
+                429, str(exc), headers={"Retry-After": str(exc.retry_after)}
+            ) from exc
+
+    def answer_chat(c: AppContext, s: Scope, body: ChatIn) -> dict[str, Any]:
         session_id = body.session_id or uuid.uuid4().hex
         with c.onto.engine.connect() as conn:
             history = [

@@ -3,11 +3,12 @@
 # other roles in the UI (X-D2D-Role header); everyone else always gets their own role.
 
 [accounts]
-# Who may have a login. Default: exactly one owner account. `d2d user add` refuses anything else,
-# and the API refuses every login if the users file breaks this rule (fails closed).
-# To invite people later: raise max_users and add their roles here, e.g. roles = ["owner", "guest"].
-max_users = 1
-roles = ["owner"]
+# Who may have a login. Invite only: there is no sign-up; the owner creates each account on the
+# Mac mini with `d2d user add <name> --role guest`. `d2d user add` refuses anything outside this
+# policy, and the API refuses every login if the users file breaks it (fails closed).
+# Guests see published stories for shared rooms and can ask the Copilot (rate-limited, llm.toml).
+max_users = 6            # you + up to 5 invited testers
+roles = ["owner", "guest"]
 
 [owner]
 description = "Sees everything; reviews, labels and manages cases."

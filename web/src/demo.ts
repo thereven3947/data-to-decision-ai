@@ -55,7 +55,8 @@ export async function demoApi<T>(path: string, role: Role, init?: RequestInit): 
       session_id: 'demo',
       answer:
         'This static demo replays real, recorded Copilot answers for the suggested questions. ' +
-        'Free-form questions need the live Copilot, which runs on a local LLM in the private beta.',
+        'Free-form questions need the live Copilot, which runs on a local LLM in the invite-only beta' +
+        (import.meta.env.VITE_LIVE_URL ? ': use "Sign in to the live beta" in the sidebar.' : '.'),
       skill: 'demo',
       skill_sha: '',
       llm_model_tag: 'static demo',

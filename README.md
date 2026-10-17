@@ -3,7 +3,8 @@
 ![Change Control Beta: raw device changes become labeled stories and plain-language answers](docs/images/social-preview.png)
 
 **[Try the static demo →](https://thereven3947.github.io/data-to-decision-ai/)** a read-only snapshot
-of the simulated home with recorded Copilot answers, hosted on GitHub Pages.
+of the simulated home with recorded Copilot answers, hosted on GitHub Pages. Invited testers use
+**Sign in to the live beta** there to reach the live app and ask the Copilot anything.
 
 A small-scale, closed-loop **change intelligence** system: it turns raw configuration and operational
 changes into labeled **change stories**, explains them in plain language through an embedded AI
@@ -64,8 +65,8 @@ The demo runs on a personal machine, so it is private by default. The principles
 
 - **Local only.** Every service listens only on the machine it runs on; nothing is published to the
   internet or the local network, and requests addressed to other hostnames are refused.
-- **Owner by invitation.** There is no sign-up. Accounts can only be created by someone already at
-  the machine, and the beta allows a single owner account.
+- **Invite only.** There is no sign-up. Accounts can only be created by the owner at the machine,
+  for a handful of testers with a limited guest role.
 - **No stored passwords.** Only salted one-way hashes are kept, outside the repository.
 - **Every request is checked on the server.** All data, review and Copilot endpoints require a valid
   session, and the server (not the browser) decides what each account may see and do.
@@ -77,7 +78,9 @@ The demo runs on a personal machine, so it is private by default. The principles
 - **Secrets stay out of git.** Keys, accounts, data and models are git-ignored; secret scanning and
   push protection are on.
 - **The public demo is static.** The GitHub Pages site is a read-only snapshot built on GitHub's
-  runners; it has no server and never connects to the private beta.
+  runners; its sign-in button is a plain link, so the page itself never talks to the live beta.
+- **Rationed Copilot.** When the live beta is reachable from the internet, questions are rate-limited
+  per account and answered one at a time, so nobody can monopolize the machine.
 - **Clones are independent.** Anyone who clones the repo runs their own copy with their own accounts,
   data and model; it cannot reach the original machine, and forks cannot use its deploy runner.
 
@@ -128,8 +131,8 @@ changelog, change events and stories with context rules and data-quality checks 
 Postgres and deploys (M4), review queue and labels (M6), classifier with abstain (M7), enrichment
 (M8), role-scoped API and the **Change Control web UI** (M9), the **Copilot agent** on local Ollama
 (M10), notifications (M5-05) and the feedback loop: routing, Insights dashboard, nightly calibration
-proposals and backups (M11). Still open: M4-04 remote access (Cloudflare Tunnel + Access, prepared
-and documented; it needs your Cloudflare account). See the [roadmap](docs/feature-roadmap.md) and
+proposals and backups (M11). Remote access for invited testers (M4-04) is built and documented;
+it goes live once the owner turns on a tunnel (Tailscale Funnel, $0). See the [roadmap](docs/feature-roadmap.md) and
 [backlog](planning/backlog.toml). Everything is toy data from the simulator; nothing connects to a
 real home or any company system.
 

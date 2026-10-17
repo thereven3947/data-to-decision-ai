@@ -359,7 +359,12 @@ def test_default_policy_allows_only_one_owner_and_fails_closed(
     auth = auth_from_env({"D2D_SECRET_KEY": "s" * 40, "D2D_USERS_FILE": str(tmp_path / "u.toml")})
     assert auth is not None
     auth.users.set_user("owner1", "owner", "owner-password-123", ROLES)
-    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth)
+    from d2d.api.scope import AccountPolicy
+
+    one_owner = AccountPolicy(max_users=1, roles=("owner",))
+    ctx = build_context(
+        engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth, one_owner
+    )
     client = TestClient(create_app(ctx, web_dist=Path("/x"), allowed_hosts=["testserver"]))
 
     public = client.get("/api/health").json()
@@ -551,3 +556,31 @@ def test_feedback_is_routed_and_visible_in_insights(
         engine,
     )
     assert again["eval_items"] == {}
+
+
+def test_guest_chat_is_rate_limited_and_owner_is_not(
+    engine: Engine, run_data: Path, tmp_path: Path
+) -> None:
+    from d2d.api.guard import ChatGuard, ChatLimits
+    from d2d.api.scope import ROLES
+    from d2d.auth import auth_from_env
+
+    auth = auth_from_env({"D2D_SECRET_KEY": "s" * 40, "D2D_USERS_FILE": str(tmp_path / "u.toml")})
+    assert auth is not None
+    auth.users.set_user("owner1", "owner", "owner-password-123", ROLES)
+    auth.users.set_user("tester", "guest", "tester-password-123", ROLES)
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth)
+    ctx.guard = ChatGuard(ChatLimits(per_user_per_hour=2, max_concurrent=1, max_waiting=0))
+    app = create_app(ctx, web_dist=Path("/x"), allowed_hosts=["testserver"])
+    guest, owner = TestClient(app), TestClient(app)
+    guest.post("/api/auth/login", json={"username": "tester", "password": "tester-password-123"})
+    owner.post("/api/auth/login", json={"username": "owner1", "password": "owner-password-123"})
+    q = {"question": "Brief me"}
+    answers = [guest.post("/api/chat", json=q) for _ in range(3)]
+    assert [r.status_code for r in answers] == [200, 200, 429]
+    refused = answers[2]
+    assert "limit" in refused.json()["detail"] and int(refused.headers["retry-after"]) > 0
+    assert all(owner.post("/api/chat", json=q).status_code == 200 for _ in range(4))
+    # Guest answers only cite stories the guest may see.
+    visible = {s["story_id"] for s in guest.get("/api/stories").json()}
+    assert set(answers[0].json()["cited_ids"]) <= visible

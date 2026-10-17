@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
-import { api, IS_DEMO, post, type ChatAnswer, type Health, type Meta } from '../api'
+import { api, IS_DEMO, LIVE_URL, post, type ChatAnswer, type Health, type Meta } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
 import { linkCitations } from '../format'
 
@@ -69,8 +69,12 @@ export default function Ask() {
 
       {IS_DEMO && (
         <p className="notice">
-          Static demo: the suggested questions replay real answers recorded from the local Copilot. Free-form questions
-          need the live private beta.
+          Static demo: the suggested questions replay real answers recorded from the local Copilot.{' '}
+          {LIVE_URL ? (
+            <>To ask your own questions, <a href={`${LIVE_URL}/ask`}>sign in to the live beta</a> (invite only).</>
+          ) : (
+            'Free-form questions need the live beta (invite only).'
+          )}
         </p>
       )}
       {health.data && !health.data.llm_available && (

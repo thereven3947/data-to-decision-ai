@@ -147,7 +147,7 @@ acceptance = [
 [[issue]]
 id = "M4-04"
 milestone = "M4"
-title = "Cloudflare Tunnel + Access"
+title = "Remote access for invited testers (Sign-in button, Tailscale Funnel or Cloudflare Tunnel)"
 size = "S"
 tags = ["manual"]
 depends_on = ["M4-03"]

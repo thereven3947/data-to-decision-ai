@@ -193,3 +193,6 @@ button.link:hover { border-color: #cfd6e6; }
 .counts .pill { margin-left: 0; }
 .demo-note { background: #222b42; border-radius: 8px; padding: 0.6rem; color: #cfd6e6; line-height: 1.45; }
 .demo-note a { color: #9db4ff; }
+.live-cta { display: flex; flex-direction: column; gap: 0.35rem; }
+.live-cta .button { text-align: center; font-weight: 600; }
+.live-cta small { color: #8c97b0; }

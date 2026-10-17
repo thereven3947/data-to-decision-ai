@@ -61,6 +61,8 @@ jobs:
         env:
           VITE_DEMO: "1"
           VITE_BASE: /${{ github.event.repository.name }}/
+          # Public address of the live beta for the "Sign in" button (repo variable; empty = hidden).
+          VITE_LIVE_URL: ${{ vars.D2D_LIVE_URL }}
         run: |
           npm ci --no-audit --no-fund
           npm run build

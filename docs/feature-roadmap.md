@@ -9,7 +9,7 @@ Milestones follow the pipeline stages. Each one ends with something demoable; is
 | **M1 · Simulator** | 1 | Household topology, baseline device model, 12 scenario injectors, Parquet snapshots, ground truth JSONL | `d2d simulate` is deterministic for a seed; every scenario visible in snapshots | ✅ done |
 | **M2 · Changelog & events** | 2–3 | Typed diff, `semantics.toml` rules, data-quality rules, change events, `d2d run`, `d2d eval changelog` | Event recall 1.0 and DQ recall ≥ 0.95 on ground truth; no noise events | ✅ done |
 | **M3 · Event linking** | 4 | Graph linking by device / topology / campaign / window, `linking.toml` | Pairwise F1 and ARI vs scenarios reported; baseline committed | ✅ done: precision 1.00, recall 0.848, F1 0.918, ARI 0.907 with the recurrence rule (was F1 0.667 without it). Remaining splits: the multi-device heat wave and child-lock scenarios need a weather / policy-window signal |
-| **M4 · Mac mini & Postgres** | — | Mac mini setup, OrbStack Postgres, Alembic, self-hosted runner, deploy workflow, Cloudflare Tunnel | Push to `main` deploys to the Mac mini after an approval click | M4-01..03 ✅ done (setup, Postgres + Alembic, runner + deploys). M4-04 remote access prepared (tunnel-aware API, runbook in deployment.md); needs your Cloudflare account and domain |
+| **M4 · Mac mini & Postgres** | — | Mac mini setup, OrbStack Postgres, Alembic, self-hosted runner, deploy workflow, Cloudflare Tunnel | Push to `main` deploys to the Mac mini after an approval click | M4-01..03 ✅ done (setup, Postgres + Alembic, runner + deploys). M4-04 built: Sign-in button on the public demo, invite-only guests, Copilot guard, tunnel-aware API; goes live when the owner enables Tailscale Funnel ($0) |
 | **M5 · Event-native devices & notifications** | 1–4 | Ring camera, Ring doorbell, light switches, garage door; CDC event stream next to snapshots; context rules (duration, away mode, quiet hours); home-notification stories pushed via ntfy | All new scenarios recovered from CDC (recall 1.0, no noise); ≤ 1 push per story; quiet hours respected | ✅ done: 8 CDC scenarios with ground truth (recall/precision 1.0), duration / policy-zone / sequence rules, `dq.cdc_gap` reconciliation, notification stories with severity, quiet hours and ntfy push (off until configured) |
 | **M6 · HITL review** | 5–6 | Review queue, cases, labeled training set with provenance, simulated reviewer | Stories labeled through the UI/CLI and versioned | ✅ done: `hitl.label` (append-only, provenance), `hitl.review_item` (abstain + 20 % audit sample), cases, `d2d review` CLI + review UI, simulated reviewer from ground truth, versioned training set (`d2d review export`) |
 | **M7 · ML classifier** | 7 | Features, calibrated classifier, per-class thresholds, abstain | Precision ≥ 0.90 per class on golden set | ✅ done: calibrated LogisticRegression on story features, per-class thresholds from out-of-fold precision, abstain → review, `d2d train` / `classify` / `eval classifier` (golden set, gate precision ≥ 0.90, coverage ≥ 0.70) |
@@ -53,8 +53,8 @@ at most one push per story, with updates folded into the same notification.
 
 ## Toy simplifications (by design, revisit before real use)
 
-- **Simple login:** no sign-up, password reset by email or 2FA in the beta. Put Cloudflare Access in
-  front before exposing the app beyond the Mac mini (M4-04).
+- **Simple login:** invite-only accounts, no sign-up, password reset by email or 2FA in the beta.
+  For stronger protection put Cloudflare Access (email login) in front of the app.
 - **Enrichment is computed on read** from events + templates (deterministic, versioned by
   `enrichment_template_sha`) instead of being stored in an ontology table.
 - **Calibration opens an issue, not a pull request:** GitHub Actions may push the proposal branch but

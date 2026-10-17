@@ -200,6 +200,8 @@ export class ApiError extends Error {
 }
 
 export const IS_DEMO = import.meta.env.VITE_DEMO === '1'
+// Public address of the live beta (Tailscale Funnel / Cloudflare), set when the demo is built.
+export const LIVE_URL: string = (import.meta.env.VITE_LIVE_URL ?? '').replace(/\/$/, '')
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (IS_DEMO) {
