@@ -194,10 +194,24 @@ def fault_facts(events: Events) -> dict[str, Any]:
     return {
         "error_episodes": sum(e["semantic_tag"] == "error_raised" for e in events),
         "offline_episodes": sum(e["semantic_tag"] == "device_offline" for e in events),
+        "battery_low": any(e["semantic_tag"] == "battery_low" for e in events),
         "error_codes": sorted(
             {str(e["new_value"]) for e in events if e["semantic_tag"] == "error_raised"}
         ),
     }
+
+
+DQ_ISSUES = {
+    "cdc_gap": "event feed out of sync",
+    "negative_energy_delta": "negative energy delta",
+    "clock_skew": "clock skew",
+    "duplicate_device": "duplicate device",
+}
+
+
+def _issue(prop: str) -> str:
+    key = prop.removeprefix("dq.")
+    return DQ_ISSUES.get(key, key.replace("_", " "))
 
 
 def enrichment_facts(
@@ -238,18 +252,45 @@ def enrichment_facts(
         case "data_error":
             dq = [e for e in events if e["property"].startswith("dq.")]
             return {
-                "issues": sorted({e["property"].removeprefix("dq.").replace("_", " ") for e in dq}),
+                "issues": sorted({_issue(e["property"]) for e in dq}),
                 "details": [
                     {
                         "device": display_name(e["device_id"]),
-                        "issue": e["property"].removeprefix("dq.").replace("_", " "),
+                        "issue": _issue(e["property"]),
                         "value": e["new_value"],
                     }
                     for e in dq
                 ],
             }
         case "access_left_open":
-            return {"state": events[0]["new_value"] if events else "open"}
+            held = [e for e in events if e["property"].endswith(".duration")]
+            return {
+                "state": held[0]["new_value"] if held else "open",
+                "quiet_hours": any(
+                    e["semantic_tag"] == "garage_opened_quiet_hours" for e in events
+                ),
+            }
+        case "security_event":
+            return {"signals": sorted({e["property"] for e in events})}
+        case "visitor_activity":
+            return {
+                "package": any(e["semantic_tag"] == "package_delivered" for e in events),
+                "missed": any(e["semantic_tag"] == "missed_visitor" for e in events),
+            }
+        case "lighting_change":
+            return {
+                "left_on": any(e["semantic_tag"] == "lights_left_on_away" for e in events),
+                "schedule": [
+                    {
+                        "device": display_name(e["device_id"]),
+                        "field": e["property"].removeprefix("schedule."),
+                        "from": e["old_value"],
+                        "to": e["new_value"],
+                    }
+                    for e in events
+                    if e["property"].startswith("schedule.")
+                ],
+            }
     return {}
 
 

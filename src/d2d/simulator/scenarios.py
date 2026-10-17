@@ -45,6 +45,17 @@ def _set_schedule(device_id: str, start: str, end: str) -> Action:
     return act
 
 
+def _set_schedule_start(device_id: str, start: str) -> Action:
+    def act(devices: Devices) -> list[Key]:
+        d = _present(devices, device_id)
+        if d is None or not d.schedule:
+            return []
+        d.schedule["start"] = start
+        return [(device_id, "schedule.start")]
+
+    return act
+
+
 def _set_attr(device_id: str, attr: str, value: object, prop: str | None = None) -> Action:
     def act(devices: Devices) -> list[Key]:
         d = _present(devices, device_id)
@@ -249,4 +260,11 @@ def build_scenarios(steps_per_hour: int) -> list[Scenario]:
             seq((0, _set_presence("smart_plug_office", True))),
         ),
         Scenario("meter_reset", "data_error", 66, seq((0, _meter_reset("smart_plug_tv")))),
+        # M5-04: the porch light automation is moved earlier (snapshot config, not CDC).
+        Scenario(
+            "lighting_automation_changed",
+            "lighting_change",
+            49,
+            seq((2, _set_schedule_start("light_porch", "17:45"))),
+        ),
     ]

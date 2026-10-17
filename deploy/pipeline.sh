@@ -21,3 +21,6 @@ $D2D load --data-dir "$DATA"
 $D2D review export --data-dir "$DATA"
 $D2D train --training-set "$DATA/labels/training_set.jsonl" --models-dir "$ENV_DIR/models"
 $D2D classify --models-dir "$ENV_DIR/models"
+# Stage 12 + notifications: route new feedback, then one notification per new published story.
+$D2D feedback route
+$D2D notify --data-dir "$DATA"

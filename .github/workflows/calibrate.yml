@@ -1,0 +1,66 @@
+name: calibrate
+
+# Nightly calibration on the Mac mini (M11-01): measure, propose, never apply.
+# Runs `d2d calibrate` against production, pushes the proposal to a calibration/<date> branch and
+# opens an issue with the report and a one-click "create pull request" link. A human reviews and
+# merges; nothing changes in production until then. Scheduled runs always use `main`.
+on:
+  schedule:
+    - cron: "0 9 * * *" # 02:00 Pacific (09:00 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the calibration branch
+  issues: write # open the report issue
+
+concurrency:
+  group: calibrate
+  cancel-in-progress: false
+
+jobs:
+  calibrate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64, mac-mini]
+    steps:
+      - uses: actions/checkout@v4
+      - name: calibrate against production
+        id: calib
+        run: |
+          export PATH="$HOME/.local/bin:$HOME/.orbstack/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          ENV_DIR="$HOME/d2d/production"
+          if [ ! -f "$ENV_DIR/.env" ] || [ ! -d "$ENV_DIR/data/labels" ]; then
+            echo "production not deployed yet; nothing to calibrate"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          set -a; . "$ENV_DIR/.env"; set +a
+          uv sync --locked --no-dev --quiet
+          uv run d2d calibrate --data-dir "$ENV_DIR/data" --models-dir "$ENV_DIR/models" --out calib
+          echo "changed=$(jq -r .changed calib/summary.json)" >> "$GITHUB_OUTPUT"
+      - name: push proposal branch and open the report issue
+        if: steps.calib.outputs.skip != 'true' && steps.calib.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export PATH="$HOME/.local/bin:$HOME/.orbstack/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          ENV_DIR="$HOME/d2d/production"
+          set -a; . "$ENV_DIR/.env"; set +a
+          branch="calibration/$(date -u +%Y-%m-%d)"
+          git config user.name "d2d-calibration"
+          git config user.email "d2d-calibration@users.noreply.github.com"
+          git switch -c "$branch"
+          [ -f calib/config/linking.toml ] && cp calib/config/linking.toml config/linking.toml
+          if [ -d calib/evals/feedback ]; then
+            mkdir -p evals/feedback
+            for f in calib/evals/feedback/*.jsonl; do cat "$f" >> "evals/feedback/$(basename "$f")"; done
+          fi
+          mkdir -p evals/calibration && cp calib/report.md "evals/calibration/$(date -u +%Y-%m-%d).md"
+          git add config/linking.toml evals
+          git commit -m "Calibration $(date -u +%Y-%m-%d): proposal from d2d calibrate"
+          git push origin "$branch"
+          uv run d2d feedback mark-exported --summary calib/summary.json
+          compare="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          body="$(cat calib/report.md)
+
+          **Review and open the pull request:** ${compare}"
+          curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues" \
+            -d "$(jq -n --arg t "Calibration $(date -u +%Y-%m-%d)" --arg b "$body" '{title: $t, body: $b}')" >/dev/null

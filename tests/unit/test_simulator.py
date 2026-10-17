@@ -53,6 +53,7 @@ def test_all_default_scenarios_are_injected(household: Household, pipeline: Pipe
     result = _run(household, pipeline)
     ids = {s["scenario_id"] for s in result.ground_truth}
     assert ids == {
+        "lighting_automation_changed",
         "firmware_rollout",
         "load_shift_to_off_peak",
         "ev_charger_moved_circuit",

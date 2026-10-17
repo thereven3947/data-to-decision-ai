@@ -16,3 +16,5 @@ users.toml
 *.users.toml
 # local-only operations notes (login runbook)
 docs/local/
+# demo snapshot generated at build time (scripts/export_demo.py)
+web/public/demo/

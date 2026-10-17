@@ -13,11 +13,22 @@
 [windows]
 peak = ["16:00", "21:00"]
 off_peak = ["22:00", "06:00"]
+quiet_hours = ["22:00", "07:00"]   # local time of the household
 
 [data_quality]
 clock_skew_threshold_s = 300
 
 # --- context rules over the CDC stream (M5-03) ---------------------------------------------
+# Policy zones: a daily local window, or on/off episodes of a CDC property (pseudo-device "home").
+[[zone]]
+name = "quiet_hours"
+window = "quiet_hours"
+
+[[zone]]
+name = "away_mode"
+property = "away_mode"
+on_value = "on"
+
 [[duration]]
 property = "door"
 value = "open"
@@ -25,7 +36,79 @@ min_minutes = 30
 kinds = ["garage_door"]
 change_kind = "operational"
 tag = "garage_left_open"
-# "light left on > 4 h" needs away-mode context (policy-zone rules), so it is not enabled yet.
+
+[[duration]]
+property = "power"
+value = "on"
+min_minutes = 240
+kinds = ["light_switch"]
+zone = "away_mode"              # only time while nobody is home counts
+change_kind = "operational"
+tag = "lights_left_on_away"
+
+[[zone_rule]]
+property = "motion"
+value = "detected"
+kinds = ["ring_camera"]
+zone = "away_mode"
+change_kind = "operational"
+tag = "motion_while_away"
+
+[[zone_rule]]
+property = "door"
+value = "open"
+kinds = ["garage_door"]
+zone = "quiet_hours"
+change_kind = "operational"
+tag = "garage_opened_quiet_hours"
+
+[[sequence]]
+tag = "missed_visitor"
+change_kind = "operational"
+emit = { property = "visit", value = "missed" }
+trigger = { property = "button", value = "pressed", kinds = ["ring_doorbell"] }
+require = { property = "person", value = "detected", kinds = ["ring_camera", "ring_doorbell"], within_s = 60 }
+absent = { property = "call", value = "answered", within_s = 120 }
+
+# M5-06: snapshot state of mirrored devices must agree with the CDC feed (dq.cdc_gap).
+[[reconcile]]
+kinds = ["light_switch"]
+cdc_property = "power"
+snapshot_field = "state"
+map = { on = "running", off = "idle" }
+initial = "off"
+
+[[reconcile]]
+kinds = ["garage_door"]
+cdc_property = "door"
+snapshot_field = "state"
+map = { open = "running", closed = "idle" }
+initial = "closed"
+
+# --- event-native device signals (CDC, M5-04) ----------------------------------------------
+[[rule]]
+property = "package"
+new_in = ["detected"]
+change_kind = "operational"
+tag = "package_delivered"
+
+[[rule]]
+property = "battery"
+new_in = ["low"]
+change_kind = "operational"
+tag = "battery_low"
+
+[[rule]]
+property = "online"
+new_in = ["offline"]
+change_kind = "operational"
+tag = "device_offline"
+
+[[rule]]
+property = "online"
+old_in = ["offline"]
+change_kind = "operational"
+tag = "device_recovered"
 
 # --- data quality (emitted on onset only) ---------------------------------------------------
 [[rule]]
@@ -37,6 +120,11 @@ tag = "dq_negative_energy_delta"
 property = "dq.clock_skew"
 change_kind = "data_quality"
 tag = "dq_clock_skew"
+
+[[rule]]
+property = "dq.cdc_gap"
+change_kind = "data_quality"
+tag = "dq_cdc_gap"
 
 [[rule]]
 property = "dq.duplicate_device"

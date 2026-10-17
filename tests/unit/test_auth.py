@@ -169,3 +169,35 @@ def test_account_policy() -> None:
     assert policy.allows({"me": "owner"}, "me")
     assert not policy.allows({"me": "owner", "x": "owner"}, "me")
     assert not policy.allows({"me": "guest"}, "me")
+
+
+def test_notification_decisions() -> None:
+    from d2d.notify import decide, load_notify, sender_from_env
+
+    cfg = load_notify(ROOT / "config" / "notifications.toml")
+    assert cfg.severity["security_event"] == "alert" and cfg.quiet_hours == ("22:00", "07:00")
+    assert decide("info", quiet=False, first_run=False) == ("digest", "recorded")
+    assert decide("notice", quiet=True, first_run=False) == ("push", "deferred")
+    assert decide("alert", quiet=True, first_run=False) == ("push", "pending")
+    assert decide("alert", quiet=False, first_run=True) == ("push", "backfill")
+    assert sender_from_env({}) is None
+    assert (
+        sender_from_env({"D2D_NTFY_URL": "https://ntfy.example/", "D2D_NTFY_TOPIC": "t"}).endpoint
+        == "https://ntfy.example/t"
+    )  # type: ignore[union-attr]
+
+
+def test_client_address_trusts_cloudflare_header_only_from_loopback() -> None:
+    from starlette.requests import Request
+
+    from d2d.api.main import client_address
+
+    def req(peer: str, headers: dict[str, str]) -> Request:
+        raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        return Request({"type": "http", "client": (peer, 1234), "headers": raw})
+
+    assert client_address(req("127.0.0.1", {"CF-Connecting-IP": "203.0.113.9"})) == "203.0.113.9"
+    assert (
+        client_address(req("198.51.100.7", {"CF-Connecting-IP": "203.0.113.9"})) == "198.51.100.7"
+    )
+    assert client_address(req("127.0.0.1", {})) == "127.0.0.1"

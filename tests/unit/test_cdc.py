@@ -16,6 +16,7 @@ def test_cdc_rows_have_change_event_shape(household: Household, pipeline: Pipeli
     assert rows == generate_cdc(household, start=pipeline.start, days=3, seed=pipeline.seed)
     assert [r["event_ts"] for r in rows] == sorted(r["event_ts"] for r in rows)
     assert {r["device_id"] for r in rows} == {
+        "home",  # away_mode context signal
         "garage_door",
         "light_living",
         "light_porch",
@@ -38,7 +39,16 @@ def test_routine_cdc_is_dropped_and_rules_promote_changes(
     household: Household, pipeline: PipelineConfig
 ) -> None:
     rows = generate_cdc(household, start=pipeline.start, days=3, seed=pipeline.seed)
-    assert cdc_changes(rows, load_semantics(CONFIG_DIR / "semantics.toml")) == []
+    # Routine activity is dropped; only the planted device signals match plain rules.
+    tags = Counter(
+        c.semantic_tag for c in cdc_changes(rows, load_semantics(CONFIG_DIR / "semantics.toml"))
+    )
+    assert tags == {
+        "package_delivered": 1,
+        "battery_low": 1,
+        "device_offline": 1,
+        "device_recovered": 1,
+    }
 
     door_rule = Rule(
         property="door", new_in=("open",), change_kind="operational", tag="door_opened"

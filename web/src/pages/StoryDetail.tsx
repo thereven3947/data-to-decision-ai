@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, getRole, post, type Meta, type StoryDetail as Detail } from '../api'
+import { api, getRole, IS_DEMO, post, type Meta, type StoryDetail as Detail } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
 import { Change, ErrorBox, KindBadge, LabelInfo, Loading, StatusBadge } from '../components/ui'
 import { formatTs, humanize, pct } from '../format'
@@ -26,6 +26,15 @@ export default function StoryDetail() {
           {formatTs(s.window_start)} → {formatTs(s.window_end)} · story <code>{s.story_id}</code> · linked by{' '}
           {s.link_reasons.length ? s.link_reasons.join(', ') : 'single event'}
         </p>
+        {s.notification && (
+          <p className="small">
+            <span className={`badge badge-sev-${s.notification.severity}`}>{s.notification.severity}</span>{' '}
+            <span className="muted">
+              notification {s.notification.channel === 'push' ? 'push' : 'digest'} · {s.notification.status}
+              {s.notification.sent_at && ` ${formatTs(s.notification.sent_at)}`}
+            </span>
+          </p>
+        )}
         <FeedbackButtons target={{ type: 'story', id: s.story_id }} />
       </header>
 
@@ -122,6 +131,14 @@ function ReviewPanel({ story }: { story: Detail }) {
     mutationFn: () => post(`/stories/${story.story_id}/label`, { category, note: note || null }),
     onSuccess: () => qc.invalidateQueries(),
   })
+  if (IS_DEMO) {
+    return (
+      <div className="card">
+        <h3>Label</h3>
+        <p className="muted small">Reviewing and relabeling stories works in the private beta; this static demo is read-only.</p>
+      </div>
+    )
+  }
   if (!meta.data?.can_label) {
     return story.review && !story.review.resolved_at ? (
       <div className="card"><p className="muted">This story is waiting for the owner's review.</p></div>

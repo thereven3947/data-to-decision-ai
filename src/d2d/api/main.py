@@ -19,6 +19,7 @@ from d2d import __version__
 from d2d.agent.provider import OllamaProvider, Provider, load_llm
 from d2d.agent.runtime import Agent
 from d2d.agent.skills import load_skills
+from d2d.api.insights import insights
 from d2d.api.repo import Ontology
 from d2d.api.scope import (
     ROLES,
@@ -161,6 +162,16 @@ def get_scope(
 S = Annotated[Scope, Depends(get_scope)]
 
 
+def client_address(request: Request) -> str:
+    """The visitor's address. Behind Cloudflare Tunnel every request arrives from cloudflared on
+    127.0.0.1, so the address Cloudflare saw is used instead (only trusted from loopback)."""
+    peer = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("cf-connecting-ip")
+    if forwarded and peer in ("127.0.0.1", "::1"):
+        return forwarded.strip()
+    return peer
+
+
 _DUMMY_HASH = "scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 
@@ -253,8 +264,7 @@ def create_app(
     def login(c: Ctx, request: Request, response: Response, body: LoginIn) -> dict[str, Any]:
         if c.auth is None:
             raise HTTPException(400, "login is turned off (D2D_AUTH=off)")
-        client = request.client.host if request.client else "unknown"
-        keys = (f"user:{body.username.lower()}", f"ip:{client}")
+        keys = (f"user:{body.username.lower()}", f"ip:{client_address(request)}")
         if c.auth.limiter.blocked(*keys):
             raise HTTPException(429, "too many failed logins; try again in 15 minutes")
         users = c.auth.users.users()
@@ -374,6 +384,11 @@ def create_app(
         except ReviewError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"case_id": case_id}
+
+    @app.get("/api/insights")
+    def get_insights(c: Ctx, s: S) -> dict[str, Any]:
+        require_owner(s)
+        return insights(c.onto, s)
 
     @app.get("/api/kpis")
     def kpis(c: Ctx, s: S) -> dict[str, Any]:

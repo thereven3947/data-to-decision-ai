@@ -48,6 +48,9 @@ jobs:
           uv run d2d load --data-dir data/check
           uv run d2d classify --models-dir data/check/models
           uv run d2d review queue
+          uv run d2d feedback route
+          uv run d2d notify --data-dir data/check
+          uv run d2d calibrate --data-dir data/check --models-dir data/check/models --out data/check/calib
           uv run alembic downgrade base
       - uses: actions/setup-node@v4
         with:

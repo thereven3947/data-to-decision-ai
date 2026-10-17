@@ -62,3 +62,27 @@ def api_plist(env: str, env_dir: Path) -> bytes:
         "StandardErrorPath": str(logs / "api.log"),
     }
     return plistlib.dumps(agent)
+
+
+def backup_label(env: str) -> str:
+    return f"com.d2d.backup.{env}"
+
+
+def backup_plist(env: str, env_dir: Path, hour: int = 3, minute: int = 30) -> bytes:
+    """launchd agent that runs ``deploy/backup.sh`` daily (local time)."""
+    if env not in ENVIRONMENTS:
+        raise ValueError(f"unknown environment {env!r}, expected one of {ENVIRONMENTS}")
+    logs = env_dir / "logs"
+    agent = {
+        "Label": backup_label(env),
+        "ProgramArguments": [
+            "/bin/bash",
+            str(env_dir / "current" / "deploy" / "backup.sh"),
+            str(env_dir),
+        ],
+        "StartCalendarInterval": {"Hour": hour, "Minute": minute},
+        "ProcessType": "Background",
+        "StandardOutPath": str(logs / "backup.log"),
+        "StandardErrorPath": str(logs / "backup.log"),
+    }
+    return plistlib.dumps(agent)

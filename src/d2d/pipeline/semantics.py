@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
@@ -37,6 +37,60 @@ class DurationRule:
     change_kind: str
     tag: str
     kinds: tuple[str, ...] = ()
+    zone: str | None = None  # only count time inside this zone (e.g. away_mode)
+
+
+@dataclass(frozen=True)
+class Zone:
+    """A policy zone: a daily local-time window, or on/off episodes of a CDC property."""
+
+    name: str
+    window: str | None = None
+    property: str | None = None
+    on_value: str = "on"
+
+
+@dataclass(frozen=True)
+class ZoneRule:
+    """A CDC change (``property`` -> ``value``) inside a zone; once per device per episode."""
+
+    property: str
+    value: str
+    zone: str
+    change_kind: str
+    tag: str
+    kinds: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SequenceRule:
+    """Trigger, a required companion signal nearby, and a missing follow-up -> one change."""
+
+    tag: str
+    change_kind: str
+    emit_property: str
+    emit_value: str
+    trigger_property: str
+    trigger_value: str
+    trigger_kinds: tuple[str, ...]
+    require_property: str
+    require_value: str
+    require_kinds: tuple[str, ...]
+    require_within_s: int
+    absent_property: str
+    absent_value: str
+    absent_within_s: int
+
+
+@dataclass(frozen=True)
+class ReconcileRule:
+    """Snapshot field that must agree with a CDC property (M5-06 ``dq.cdc_gap``)."""
+
+    kinds: tuple[str, ...]
+    cdc_property: str
+    snapshot_field: str
+    mapping: dict[str, str]
+    initial: str
 
 
 @dataclass(frozen=True)
@@ -45,6 +99,10 @@ class Semantics:
     windows: dict[str, tuple[str, str]]
     clock_skew_threshold_s: int = 300
     durations: tuple[DurationRule, ...] = ()
+    zones: dict[str, Zone] = field(default_factory=dict)
+    zone_rules: tuple[ZoneRule, ...] = ()
+    sequences: tuple[SequenceRule, ...] = ()
+    reconciles: tuple[ReconcileRule, ...] = ()
 
     def classify(self, prop: str, old: str | None, new: str | None) -> tuple[str, str] | None:
         """Return ``(change_kind, semantic_tag)`` of the first matching rule, else None."""
@@ -112,12 +170,66 @@ def load_semantics(path: Path) -> Semantics:
     durations = tuple(
         DurationRule(**{**d, "kinds": tuple(d.get("kinds", ()))}) for d in raw.get("duration", [])
     )
-    for d in durations:
-        if d.change_kind not in CHANGE_KINDS:
-            raise ConfigError(f"duration {d.tag!r}: unknown change_kind {d.change_kind!r}")
+    zones = {z["name"]: Zone(**z) for z in raw.get("zone", [])}
+    for z in zones.values():
+        if (z.window is None) == (z.property is None):
+            raise ConfigError(f"zone {z.name!r}: set exactly one of window or property")
+        if z.window is not None and z.window not in windows:
+            raise ConfigError(f"zone {z.name!r}: unknown window {z.window!r}")
+    zone_rules = tuple(
+        ZoneRule(**{**r, "kinds": tuple(r.get("kinds", ()))}) for r in raw.get("zone_rule", [])
+    )
+    sequences = tuple(_sequence(r) for r in raw.get("sequence", []))
+    reconciles = tuple(
+        ReconcileRule(
+            kinds=tuple(r["kinds"]),
+            cdc_property=str(r["cdc_property"]),
+            snapshot_field=str(r["snapshot_field"]),
+            mapping={str(k): str(v) for k, v in r["map"].items()},
+            initial=str(r["initial"]),
+        )
+        for r in raw.get("reconcile", [])
+    )
+    tagged: list[tuple[str, str, str | None]] = [
+        *((d.tag, d.change_kind, d.zone) for d in durations),
+        *((z.tag, z.change_kind, z.zone) for z in zone_rules),
+        *((q.tag, q.change_kind, None) for q in sequences),
+    ]
+    for tag, kind, zone_name in tagged:
+        if kind not in CHANGE_KINDS:
+            raise ConfigError(f"{tag!r}: unknown change_kind {kind!r}")
+        if zone_name is not None and zone_name not in zones:
+            raise ConfigError(f"{tag!r}: unknown zone {zone_name!r}")
     return Semantics(
         rules=rules,
         windows=windows,
         clock_skew_threshold_s=int(dq.get("clock_skew_threshold_s", 300)),
         durations=durations,
+        zones=zones,
+        zone_rules=zone_rules,
+        sequences=sequences,
+        reconciles=reconciles,
     )
+
+
+def _sequence(raw: dict[str, Any]) -> SequenceRule:
+    try:
+        trig, req, absent, emit = raw["trigger"], raw["require"], raw["absent"], raw["emit"]
+        return SequenceRule(
+            tag=str(raw["tag"]),
+            change_kind=str(raw["change_kind"]),
+            emit_property=str(emit["property"]),
+            emit_value=str(emit["value"]),
+            trigger_property=str(trig["property"]),
+            trigger_value=str(trig["value"]),
+            trigger_kinds=tuple(trig.get("kinds", ())),
+            require_property=str(req["property"]),
+            require_value=str(req["value"]),
+            require_kinds=tuple(req.get("kinds", ())),
+            require_within_s=int(req["within_s"]),
+            absent_property=str(absent["property"]),
+            absent_value=str(absent["value"]),
+            absent_within_s=int(absent["within_s"]),
+        )
+    except KeyError as exc:
+        raise ConfigError(f"sequence {raw.get('tag')!r}: missing {exc}") from exc

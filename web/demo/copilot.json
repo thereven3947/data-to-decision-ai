@@ -1,0 +1,238 @@
+{
+  "Brief me on what happened this week": {
+    "answer": "### Household Briefing\n\n- [story:e869aaaf66e56a48] **Data issue on Smart plug tv: negative energy delta** (category: data_error, status: published)\n- [story:9ac8ec8f5e3c72b6] **Missed visitor at the front door** (category: visitor_activity, status: published)\n- [story:b8009db06a5d0b95] **Ring camera front: 1 offline** (category: fault_degradation, status: published)\n- [story:117d1b6656752bc6] **Washer: 2 error episodes, 1 offline** (category: fault_degradation, status: published)\n- [story:38c5b4519a00ca6f] **Safety setting changed on Water heater** (category: safety_setting_change, status: published)\n\n23 stories, 53 events, 4 open reviews.\n\nNeeds your attention:\n- [story:61b25af364162bcf] **Data issue on Smart plug lamp: duplicate device** (category: data_error, status: needs_review)\n- [story:26d2dfe858e5b7d8] **Safety setting changed on Washer** (category: safety_setting_change, status: needs_review)",
+    "checker": {
+      "attempts": 1,
+      "errors": [],
+      "ok": true
+    },
+    "citations": {
+      "117d1b6656752bc6": "Washer: 2 error episodes, 1 offline",
+      "26d2dfe858e5b7d8": "Safety setting changed on Washer",
+      "38c5b4519a00ca6f": "Safety setting changed on Water heater",
+      "61b25af364162bcf": "Data issue on Smart plug lamp: duplicate device",
+      "9ac8ec8f5e3c72b6": "Missed visitor at the front door",
+      "b8009db06a5d0b95": "Ring camera front: 1 offline",
+      "e869aaaf66e56a48": "Data issue on Smart plug tv: negative energy delta"
+    },
+    "cited_ids": [
+      "e869aaaf66e56a48",
+      "9ac8ec8f5e3c72b6",
+      "b8009db06a5d0b95",
+      "117d1b6656752bc6",
+      "38c5b4519a00ca6f",
+      "61b25af364162bcf",
+      "26d2dfe858e5b7d8"
+    ],
+    "latency_ms": 20727,
+    "llm_model_tag": "ollama:qwen3:14b",
+    "skill": "household_briefing",
+    "tokens_in": 2147,
+    "tokens_out": 304,
+    "tool_calls": [
+      {
+        "arguments": {},
+        "error": null,
+        "name": "get_kpis",
+        "ok": true,
+        "prefetch": true
+      },
+      {
+        "arguments": {
+          "limit": 12
+        },
+        "error": null,
+        "name": "list_stories",
+        "ok": true,
+        "prefetch": true
+      }
+    ]
+  },
+  "What should I do about the washer?": {
+    "answer": "The washer has had 2 error episodes (code E21) and 1 offline episode between Fri Oct 02 2026 19:00 and Sat Oct 03 2026 09:15 [story:117d1b6656752bc6]. Additionally, the washer's child lock was turned off at Fri Oct 02 2026 13:00 [story:26d2dfe858e5b7d8].\n\n(proposed) Check the error code E21 and confirm if errors are getting more frequent [story:117d1b6656752bc6].\n(proposed) Book a service visit for the washer [story:117d1b6656752bc6].\n(proposed) Avoid unattended runs of the washer until it is checked [story:117d1b6656752bc6].\n(proposed) Revert the child lock setting if the change was not intended [story:26d2dfe858e5b7d8].",
+    "checker": {
+      "attempts": 1,
+      "errors": [],
+      "ok": true
+    },
+    "citations": {
+      "117d1b6656752bc6": "Washer: 2 error episodes, 1 offline",
+      "26d2dfe858e5b7d8": "Safety setting changed on Washer"
+    },
+    "cited_ids": [
+      "117d1b6656752bc6",
+      "26d2dfe858e5b7d8"
+    ],
+    "latency_ms": 44001,
+    "llm_model_tag": "ollama:qwen3:14b",
+    "skill": "action_items",
+    "tokens_in": 7643,
+    "tokens_out": 371,
+    "tool_calls": [
+      {
+        "arguments": {
+          "limit": 25
+        },
+        "error": null,
+        "name": "list_stories",
+        "ok": true,
+        "prefetch": true
+      },
+      {
+        "arguments": {
+          "story_id": "117d1b6656752bc6"
+        },
+        "error": null,
+        "name": "get_story",
+        "ok": true,
+        "prefetch": false
+      },
+      {
+        "arguments": {
+          "story_id": "26d2dfe858e5b7d8"
+        },
+        "error": null,
+        "name": "get_story",
+        "ok": true,
+        "prefetch": false
+      },
+      {
+        "arguments": {
+          "category": "fault_degradation"
+        },
+        "error": null,
+        "name": "get_category_playbook",
+        "ok": true,
+        "prefetch": false
+      },
+      {
+        "arguments": {
+          "category": "safety_setting_change"
+        },
+        "error": null,
+        "name": "get_category_playbook",
+        "ok": true,
+        "prefetch": false
+      }
+    ]
+  },
+  "What's been going on with the garage door?": {
+    "answer": "The garage door had two events:\n- [story:4240816b4028c722] At 22:15 PDT on Thu Oct 01 2026, the garage door opened during quiet hours.\n- At 22:45 PDT on Thu Oct 01 2026, the garage door was left open for more than 30 minutes.",
+    "checker": {
+      "attempts": 1,
+      "errors": [],
+      "ok": true
+    },
+    "citations": {
+      "4240816b4028c722": "Garage door left open"
+    },
+    "cited_ids": [
+      "4240816b4028c722"
+    ],
+    "latency_ms": 9402,
+    "llm_model_tag": "ollama:qwen3:14b",
+    "skill": "device_history",
+    "tokens_in": 2865,
+    "tokens_out": 116,
+    "tool_calls": [
+      {
+        "arguments": {},
+        "error": null,
+        "name": "list_devices",
+        "ok": true,
+        "prefetch": true
+      },
+      {
+        "arguments": {
+          "device_id": "garage_door"
+        },
+        "error": null,
+        "name": "get_device_history",
+        "ok": true,
+        "prefetch": false
+      }
+    ]
+  },
+  "Which devices had data problems?": {
+    "answer": "The devices with data problems are:\n\n- **Smart plug tv** [story:e869aaaf66e56a48]\n- **Smart plug lamp** [story:61b25af364162bcf]\n- **Light porch** [story:ab7896c40d9c6b02]\n- **Thermostat** [story:df64278a3cd08f3f]",
+    "checker": {
+      "attempts": 1,
+      "errors": [],
+      "ok": true
+    },
+    "citations": {
+      "61b25af364162bcf": "Data issue on Smart plug lamp: duplicate device",
+      "ab7896c40d9c6b02": "Data issue on Light porch: event feed out of sync",
+      "df64278a3cd08f3f": "Data issue on Thermostat: clock skew",
+      "e869aaaf66e56a48": "Data issue on Smart plug tv: negative energy delta"
+    },
+    "cited_ids": [
+      "e869aaaf66e56a48",
+      "61b25af364162bcf",
+      "ab7896c40d9c6b02",
+      "df64278a3cd08f3f"
+    ],
+    "latency_ms": 7090,
+    "llm_model_tag": "ollama:qwen3:14b",
+    "skill": "general",
+    "tokens_in": 2490,
+    "tokens_out": 103,
+    "tool_calls": [
+      {
+        "arguments": {},
+        "error": null,
+        "name": "get_kpis",
+        "ok": true,
+        "prefetch": true
+      },
+      {
+        "arguments": {
+          "limit": 15
+        },
+        "error": null,
+        "name": "list_stories",
+        "ok": true,
+        "prefetch": true
+      }
+    ]
+  },
+  "Why did the dishwasher start running at 2 a.m.?": {
+    "answer": "The dishwasher started running at 2 a.m. because its schedule was shifted to off-peak hours as part of a load management strategy [story:bfe961fd6bb47399]. This change was made to save energy costs by running the appliance during cheaper hours. The dishwasher's new schedule is from 2:00 a.m. to 3:30 a.m., moving it out of the peak-tariff window. This shift is linked to the washer, which also had its schedule adjusted to off-peak hours. The category \"load_shift\" means that appliance schedules are moved out of the peak-tariff window to reduce energy costs.",
+    "checker": {
+      "attempts": 1,
+      "errors": [],
+      "ok": true
+    },
+    "citations": {
+      "bfe961fd6bb47399": "2 appliance schedules moved off-peak"
+    },
+    "cited_ids": [
+      "bfe961fd6bb47399"
+    ],
+    "latency_ms": 28153,
+    "llm_model_tag": "ollama:qwen3:14b",
+    "skill": "why_question",
+    "tokens_in": 7142,
+    "tokens_out": 173,
+    "tool_calls": [
+      {
+        "arguments": {
+          "limit": 25
+        },
+        "error": null,
+        "name": "list_stories",
+        "ok": true,
+        "prefetch": true
+      },
+      {
+        "arguments": {
+          "story_id": "bfe961fd6bb47399"
+        },
+        "error": null,
+        "name": "get_story",
+        "ok": true,
+        "prefetch": false
+      }
+    ]
+  }
+}

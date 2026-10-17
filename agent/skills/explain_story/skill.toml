@@ -2,4 +2,4 @@ intent = "Explain what happened in one change story"
 priority = 10
 # Matches a story id or "what happened with/to X".
 patterns = ['\b[0-9a-f]{16}\b', 'what happened', 'explain', 'tell me about']
-prefetch = [{ tool = "list_stories", args = { limit = 10 } }]
+prefetch = [{ tool = "list_stories", args = { limit = 25 } }]

@@ -6,6 +6,7 @@ import json
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
 
@@ -35,19 +36,30 @@ class ChangelogEval:
         return self.dq_matched / self.dq_expected if self.dq_expected else 1.0
 
 
-def evaluate_linking(data_dir: Path) -> dict[str, float]:
-    """Pairwise precision/recall/F1 and Adjusted Rand Index over ground-truth events."""
+def linking_truth(data_dir: Path) -> dict[Key, str]:
     truth: dict[Key, str] = {}
     for line in (data_dir / "ground_truth" / "scenarios.jsonl").read_text("utf-8").splitlines():
         s = json.loads(line)
         for e in s["events"]:
             truth[(e["device_id"], e["property"], e["ts"])] = s["scenario_id"]
+    return truth
+
+
+def evaluate_linking(data_dir: Path) -> dict[str, float]:
+    """Pairwise precision/recall/F1 and Adjusted Rand Index over ground-truth events."""
     events = pq.read_table(data_dir / "events" / "events.parquet").to_pylist()
+    stories = pq.read_table(data_dir / "stories" / "stories.parquet").to_pylist()
+    return linking_metrics(linking_truth(data_dir), events, stories)
+
+
+def linking_metrics(
+    truth: dict[Key, str], events: list[dict[str, Any]], stories: list[dict[str, Any]]
+) -> dict[str, float]:
     key_of = {
         e["event_id"]: (e["device_id"], e["property"], e["event_ts"].isoformat()) for e in events
     }
     pred: dict[Key, str] = {}
-    for story in pq.read_table(data_dir / "stories" / "stories.parquet").to_pylist():
+    for story in stories:
         for eid in story["event_ids"]:
             pred[key_of[eid]] = story["story_id"]
     keys = sorted(truth.keys() & pred.keys())

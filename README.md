@@ -2,6 +2,9 @@
 
 ![Change Control Beta: raw device changes become labeled stories and plain-language answers](docs/images/social-preview.png)
 
+**[Try the static demo →](https://thereven3947.github.io/data-to-decision-ai/)** a read-only snapshot
+of the simulated home with recorded Copilot answers, hosted on GitHub Pages.
+
 A small-scale, closed-loop **change intelligence** system: it turns raw configuration and operational
 changes into labeled **change stories**, explains them in plain language through an embedded AI
 agent, and uses human feedback to calibrate every layer — pipeline, ML, enrichment and agent skills.
@@ -27,7 +30,8 @@ charge of what matters:
 ## Change Control Beta (demo)
 
 The web app turns the simulated home's raw changes into reviewed, explained **change stories**, with a
-local Copilot that answers questions about them. Screenshots from the Mac mini staging deploy
+local Copilot that answers questions about them. The [public demo](https://thereven3947.github.io/data-to-decision-ai/)
+is a static, read-only snapshot; the live beta (review, feedback, live Copilot) runs privately. Screenshots from the Mac mini staging deploy
 (regenerate with `uv run --with playwright python scripts/screenshots.py`):
 
 <table>
@@ -72,6 +76,8 @@ The demo runs on a personal machine, so it is private by default. The principles
   source maps in the web bundle.
 - **Secrets stay out of git.** Keys, accounts, data and models are git-ignored; secret scanning and
   push protection are on.
+- **The public demo is static.** The GitHub Pages site is a read-only snapshot built on GitHub's
+  runners; it has no server and never connects to the private beta.
 - **Clones are independent.** Anyone who clones the repo runs their own copy with their own accounts,
   data and model; it cannot reach the original machine, and forks cannot use its deploy runner.
 
@@ -117,12 +123,13 @@ Please open a private report through the repository's **Security** tab instead o
 
 ## Status
 
-The full toy loop runs locally on the Mac mini: simulator → changelog → change events → stories
-(M1–M3), Postgres + deploys (M4), review queue and labels (M6), classifier with abstain (M7),
-enrichment (M8), role-scoped API and the **Change Control web UI** (M9), and the **Copilot agent** on
-local Ollama (M10), with 👍/👎 and page feedback stored for UX research (part of M11). Still open:
-M4-04 (Cloudflare Tunnel), M5-03..06 (more CDC rules/scenarios, notifications) and M11 routing,
-calibration PRs and KPI dashboard. See the [roadmap](docs/feature-roadmap.md) and
+The full toy loop runs on the Mac mini: simulator with snapshot and event-stream devices (M1, M5),
+changelog, change events and stories with context rules and data-quality checks (M2, M3, M5),
+Postgres and deploys (M4), review queue and labels (M6), classifier with abstain (M7), enrichment
+(M8), role-scoped API and the **Change Control web UI** (M9), the **Copilot agent** on local Ollama
+(M10), notifications (M5-05) and the feedback loop: routing, Insights dashboard, nightly calibration
+proposals and backups (M11). Still open: M4-04 remote access (Cloudflare Tunnel + Access, prepared
+and documented; it needs your Cloudflare account). See the [roadmap](docs/feature-roadmap.md) and
 [backlog](planning/backlog.toml). Everything is toy data from the simulator; nothing connects to a
 real home or any company system.
 

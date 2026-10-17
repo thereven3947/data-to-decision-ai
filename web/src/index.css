@@ -186,3 +186,10 @@ a.citation { background: var(--accent-soft); padding: 0 6px; border-radius: 6px;
 .signed-in small { display: block; color: #8c97b0; }
 button.link { background: none; border: 1px solid #39435e; color: #cfd6e6; padding: 0.2rem 0.55rem; font-size: 0.78rem; }
 button.link:hover { border-color: #cfd6e6; }
+.badge-sev-alert { background: #fff5f5; color: var(--bad); }
+.badge-sev-notice { background: #fff1db; color: var(--warn); }
+.badge-sev-info { background: #edf0f5; color: #3d4659; }
+.counts { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.counts .pill { margin-left: 0; }
+.demo-note { background: #222b42; border-radius: 8px; padding: 0.6rem; color: #cfd6e6; line-height: 1.45; }
+.demo-note a { color: #9db4ff; }

@@ -1,0 +1,83 @@
+name: pages
+
+# Public static demo of Change Control Beta on GitHub Pages.
+# Runs only on GitHub-hosted runners (never on the Mac mini): rebuilds the toy household with the
+# default config in a throwaway Postgres, exports a read-only snapshot per role plus the recorded
+# Copilot answers (web/demo/copilot.json), and publishes the web app in demo mode. The demo never
+# contacts the private beta.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: d2d
+          POSTGRES_USER: d2d
+          POSTGRES_PASSWORD: demo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U d2d -d d2d" --health-interval 5s --health-timeout 3s
+          --health-retries 20
+    env:
+      D2D_DATABASE_URL: postgresql+psycopg://d2d:demo@localhost:5432/d2d
+      D2D_LLM: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: build the toy household and export the demo snapshot
+        run: |
+          uv run alembic upgrade head
+          uv run d2d simulate --data-dir data/demo
+          uv run d2d run --data-dir data/demo
+          uv run d2d load --data-dir data/demo
+          uv run d2d review export --data-dir data/demo
+          uv run d2d train --training-set data/demo/labels/training_set.jsonl --models-dir data/demo/models
+          uv run d2d classify --models-dir data/demo/models
+          uv run d2d notify --data-dir data/demo
+          uv run python scripts/export_demo.py --data-dir data/demo --out web/public/demo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: build the web app in demo mode
+        working-directory: web
+        env:
+          VITE_DEMO: "1"
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

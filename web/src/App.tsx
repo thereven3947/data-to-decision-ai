@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { api, ROLES, type Health, type Meta, type Role, type SessionUser } from './api'
+import { api, IS_DEMO, ROLES, type Health, type Meta, type Role, type SessionUser } from './api'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { FeedbackWidget } from './components/Feedback'
 import { humanize } from './format'
@@ -9,6 +9,7 @@ import Changelog from './pages/Changelog'
 import DeviceDetail from './pages/DeviceDetail'
 import Devices from './pages/Devices'
 import Events from './pages/Events'
+import InsightsPage from './pages/Insights'
 import NotFound from './pages/NotFound'
 import Overview from './pages/Overview'
 import Review from './pages/Review'
@@ -24,6 +25,7 @@ const NAV = [
   ['/review', 'Review queue'],
   ['/ask', 'Ask the Copilot'],
 ] as const
+const OWNER_NAV = [['/insights', 'Insights']] as const
 
 interface Props {
   role: Role
@@ -51,7 +53,7 @@ export default function App({ role, onRoleChange, canSwitch, user, onLogout }: P
           </div>
         </div>
         <nav>
-          {NAV.map(([to, label]) => (
+          {[...NAV, ...(meta.data?.can_label ? OWNER_NAV : [])].map(([to, label]) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>
               {label}
             </NavLink>
@@ -88,7 +90,15 @@ export default function App({ role, onRoleChange, canSwitch, user, onLogout }: P
           <span className={`dot ${health.data?.llm_available ? 'ok' : 'warn'}`} />
           {health.data?.llm ? `${health.data.llm}${health.data.llm_available ? '' : ' (offline)'}` : 'LLM off'}
         </div>
-        <p className="toy-note">Toy data from the D2D simulator. No real devices or company systems.</p>
+        {IS_DEMO ? (
+          <p className="toy-note demo-note">
+            <strong>Static demo</strong> on GitHub Pages: a read-only snapshot of simulated toy data with recorded
+            Copilot answers. It never connects to the private beta.{' '}
+            <a href="https://github.com/thereven3947/data-to-decision-ai">Source on GitHub</a>
+          </p>
+        ) : (
+          <p className="toy-note">Toy data from the D2D simulator. No real devices or company systems.</p>
+        )}
       </aside>
       <main className="content">
         <ErrorBoundary key={location.pathname}>
@@ -102,6 +112,7 @@ export default function App({ role, onRoleChange, canSwitch, user, onLogout }: P
           <Route path="/devices/:deviceId" element={<DeviceDetail />} />
           <Route path="/review" element={<Review />} />
           <Route path="/ask" element={<Ask />} />
+          <Route path="/insights" element={<InsightsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </ErrorBoundary>

@@ -1,4 +1,4 @@
 intent = "Explain why something happened"
 priority = 15
 patterns = ['^why\b', '\bwhy (did|is|was|does)\b', 'cause', 'reason']
-prefetch = [{ tool = "list_stories", args = { limit = 15 } }]
+prefetch = [{ tool = "list_stories", args = { limit = 25 } }]

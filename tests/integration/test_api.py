@@ -187,7 +187,7 @@ def test_chat_with_tool_loop_grounding_retry_and_record(engine: Engine, run_data
     provider = Scripted(
         [
             Reply("", [ToolCall("get_story", {"story_id": sid})], 100, 10),
-            Reply(f"It saves 99 kWh [story:{sid}]."),  # fails the number check
+            Reply(f"It saves 987.6 kWh [story:{sid}]."),  # fails the number check
             Reply(f"Schedules moved off-peak, saving about $1.13 per day [story:{sid}]."),
         ]
     )
@@ -253,7 +253,7 @@ def test_chat_falls_back_when_llm_is_down_or_ungrounded(engine: Engine, run_data
 def test_health_and_meta(engine: Engine, run_data: Path) -> None:
     client = _client(engine, run_data)
     health = _get(client, "/health")
-    assert health["schema"] == "0004" and health["llm"] is None
+    assert health["schema"] == "0005" and health["llm"] is None
     r = client.get("/api/health")
     assert r.headers["x-frame-options"] == "DENY"
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
@@ -404,3 +404,150 @@ def test_chat_without_login_never_reaches_the_model(
     assert provider.calls == []
     with engine.connect() as conn:
         assert conn.execute(select(func.count()).select_from(chat_message)).scalar_one() == before
+
+
+class FakeSender:
+    def __init__(self, fail: bool = False) -> None:
+        self.sent: list[tuple[str, int]] = []
+        self.fail = fail
+
+    def send(self, title: str, body: str, priority: int, tags: list[str]) -> None:
+        import httpx
+
+        if self.fail:
+            raise httpx.ConnectError("down")
+        self.sent.append((title, priority))
+
+
+def test_notifications_backfill_then_push_with_quiet_hours(engine: Engine, run_data: Path) -> None:
+    from datetime import UTC, datetime
+
+    from sqlalchemy import delete, update
+
+    from d2d.api.scope import Scope, load_roles
+    from d2d.db import change_story, notification
+    from d2d.notify import load_notify, run_notifications
+
+    client = _client(engine, run_data)
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    owner = Scope(
+        load_roles(ROOT / "config" / "roles.toml")["owner"], ctx.onto.household, ctx.onto.taxonomy
+    )
+    cfg = load_notify(ROOT / "config" / "notifications.toml")
+    with engine.begin() as conn:
+        conn.execute(delete(notification))
+    noon = datetime(2026, 10, 18, 19, 0, tzinfo=UTC)  # 12:00 local
+    night = datetime(2026, 10, 18, 7, 0, tzinfo=UTC)  # 00:00 local, quiet hours
+
+    first = run_notifications(ctx.onto, owner, cfg, FakeSender(), now=noon)
+    assert first.backfill == first.new > 0 and first.sent == 0  # never floods on first run
+    assert run_notifications(ctx.onto, owner, cfg, FakeSender(), now=noon).new == 0
+
+    # Two "new" stories appear: an alert and a notice, at night.
+    published = [s for s in ctx.onto.list_stories(owner, status="published")]
+    alert = next(s for s in published if cfg.severity.get(s["category"]) == "alert")
+    notice = next(s for s in published if cfg.severity.get(s["category"]) == "notice")
+    with engine.begin() as conn:
+        conn.execute(
+            delete(notification).where(
+                notification.c.story_id.in_([alert["story_id"], notice["story_id"]])
+            )
+        )
+    sender = FakeSender()
+    s = run_notifications(ctx.onto, owner, cfg, sender, now=night)
+    assert s.new == 2 and s.sent == 1 and s.deferred == 1
+    assert sender.sent == [(alert["title"], 5)]  # alert bypasses quiet hours
+    s = run_notifications(ctx.onto, owner, cfg, sender, now=noon)
+    assert s.sent == 1 and sender.sent[-1][0] == notice["title"]  # notice after quiet hours
+    assert run_notifications(ctx.onto, owner, cfg, sender, now=noon).sent == 0  # one push per story
+    detail = _get(client, f"/stories/{alert['story_id']}")
+    assert detail["notification"]["status"] == "sent"
+
+    # Without a push channel, due pushes are recorded instead.
+    with engine.begin() as conn:
+        conn.execute(
+            update(notification)
+            .where(notification.c.story_id == alert["story_id"])
+            .values(status="pending")
+        )
+    assert run_notifications(ctx.onto, owner, cfg, None, now=noon).recorded == 1
+    _ = change_story
+
+
+def test_feedback_is_routed_and_visible_in_insights(
+    engine: Engine, run_data: Path, tmp_path: Path
+) -> None:
+    from d2d.calibration import calibrate, mark_exported
+    from d2d.db import eval_item, review_item
+    from d2d.feedback import route_feedback
+
+    client = _client(engine, run_data)
+    sid = _get(client, "/stories")[0]["story_id"]
+    posts = [
+        {"target_type": "story", "target_id": sid, "rating": "down", "reason": "wrong_category"},
+        {"target_type": "story", "target_id": sid, "rating": "down", "reason": "wrong_grouping"},
+        {
+            "target_type": "story",
+            "target_id": sid,
+            "rating": "down",
+            "reason": "missing_data",
+            "comment": "no kWh",
+        },
+        {
+            "target_type": "message",
+            "target_id": "999999",
+            "rating": "down",
+            "reason": "unhelpful_answer",
+        },
+        {
+            "target_type": "page",
+            "target_id": "/",
+            "rating": "comment",
+            "comment": "love it",
+            "page": "/",
+        },
+        {"target_type": "story", "target_id": sid, "rating": "up"},
+    ]
+    for p in posts:
+        assert client.post("/api/feedback", json=p).status_code == 200
+    counts = route_feedback(engine)
+    assert {"labels", "linking", "data", "conversations", "ux", "kpi"} <= set(counts)
+    assert route_feedback(engine) == {}  # idempotent
+    with engine.connect() as conn:
+        item = (
+            conn.execute(select(review_item).where(review_item.c.story_id == sid)).mappings().one()
+        )
+        assert item["reason"] == "feedback" and item["resolved_at"] is None
+        sets = set(conn.execute(select(eval_item.c.set_name)).scalars())
+    assert {"labels", "linking", "data", "conversations", "ux"} <= sets
+
+    data = _get(client, "/insights")
+    assert data["feedback"]["unrouted"] == 0 and data["feedback"]["by_route"]["ux"] >= 1
+    assert any(f["comment"] == "love it" for f in data["feedback"]["recent"])
+    assert {"copilot", "review", "notifications", "eval_sets", "pipeline"} <= data.keys()
+    assert client.get("/api/insights", headers={"X-D2D-Role": "guest"}).status_code == 403
+
+    out = tmp_path / "calib"
+    summary = calibrate(
+        run_data,
+        ROOT / "config",
+        tmp_path / "no-models",
+        ROOT / "evals/golden/stories.jsonl",
+        "home_demo",
+        out,
+        engine,
+    )
+    assert summary["eval_items"]["linking"] >= 1 and (out / "report.md").is_file()
+    assert summary["linking"]["best"]["violations"] <= summary["linking"]["current"]["violations"]
+    assert (out / "evals" / "feedback" / "data.jsonl").read_text().count("no kWh") == 1
+    mark_exported(engine, summary["item_ids"])
+    again = calibrate(
+        run_data,
+        ROOT / "config",
+        tmp_path / "no-models",
+        ROOT / "evals/golden/stories.jsonl",
+        "home_demo",
+        tmp_path / "calib2",
+        engine,
+    )
+    assert again["eval_items"] == {}

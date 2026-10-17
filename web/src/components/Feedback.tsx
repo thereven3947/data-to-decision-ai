@@ -1,13 +1,18 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { api, getRole, post, type Meta } from '../api'
+import { api, getRole, IS_DEMO, post, type Meta } from '../api'
 import { humanize } from '../format'
 
 type Target = { type: 'story' | 'message'; id: string }
 
 /** 👍 / 👎 with an optional reason and comment for a story or a chat answer. */
 export function FeedbackButtons({ target }: { target: Target }) {
+  if (IS_DEMO) return null
+  return <FeedbackButtonsLive target={target} />
+}
+
+function FeedbackButtonsLive({ target }: { target: Target }) {
   const location = useLocation()
   const meta = useQuery({ queryKey: ['meta', getRole()], queryFn: () => api<Meta>('/meta') })
   const [rating, setRating] = useState<'up' | 'down' | null>(null)
@@ -53,6 +58,11 @@ export function FeedbackButtons({ target }: { target: Target }) {
 
 /** Floating "Feedback" button for UI/UX comments on the current page. */
 export function FeedbackWidget() {
+  if (IS_DEMO) return null
+  return <FeedbackWidgetLive />
+}
+
+function FeedbackWidgetLive() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
   const [comment, setComment] = useState('')

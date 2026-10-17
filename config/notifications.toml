@@ -1,0 +1,37 @@
+# Notification stories (M5-05). One notification per story, decided after classification.
+#   info   -> daily digest only (no push)
+#   notice -> push, but waits until quiet hours end
+#   alert  -> push immediately, also during quiet hours
+#
+# Pushes go to an ntfy server only when the environment's .env sets D2D_NTFY_URL and
+# D2D_NTFY_TOPIC (optional D2D_NTFY_TOKEN). Without them every notification is still recorded in
+# Postgres (notify.notification) and shown in the app, but nothing leaves the Mac mini.
+# A public ntfy.sh topic is readable by anyone who knows its name: use a long random topic, a
+# token-protected topic, or a self-hosted ntfy server.
+
+default = "info"
+max_push_per_run = 5        # flood guard; the rest wait for the next run
+
+[severity]
+security_event = "alert"
+access_left_open = "alert"
+visitor_activity = "notice"
+fault_degradation = "notice"
+safety_setting_change = "notice"
+circuit_reassignment = "notice"
+data_error = "info"
+lighting_change = "info"
+load_shift = "info"
+firmware_rollout = "info"
+network_change = "info"
+weather_dr_response = "info"
+device_replacement = "info"
+device_added_removed = "info"
+
+[quiet_hours]
+window = ["22:00", "07:00"]  # household local time
+
+[ntfy.priority]               # ntfy priority 1 (min) .. 5 (max)
+info = 2
+notice = 3
+alert = 5

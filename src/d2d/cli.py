@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,8 +16,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
-from d2d.api.scope import ROLES, load_account_policy
+from d2d.api.repo import Ontology
+from d2d.api.scope import ROLES, Scope, load_account_policy, load_roles
 from d2d.auth import MIN_PASSWORD, AuthError, UsersFile, users_file_for
+from d2d.calibration import calibrate, mark_exported
 from d2d.config import (
     ConfigError,
     config_dir,
@@ -27,7 +30,9 @@ from d2d.config import (
 )
 from d2d.db import LoadError, load_run
 from d2d.db import database_url as default_url
+from d2d.enrichment import load_enrichment
 from d2d.evaluation import evaluate_changelog, evaluate_linking
+from d2d.feedback import route_feedback
 from d2d.hitl.review import (
     ReviewError,
     create_case,
@@ -47,19 +52,22 @@ from d2d.ml.infer import classify_new
 from d2d.ml.train import Classifier, TrainParams, load_meta, model_version
 from d2d.ml.train import save as save_model
 from d2d.ml.train import train as train_model
-from d2d.ops import api_plist, pipeline_plist
+from d2d.notify import load_notify, run_notifications, sender_from_env
+from d2d.ops import api_plist, backup_plist, pipeline_plist
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
-from d2d.simulator import generate_cdc, write_cdc, write_ground_truth, write_snapshots
 from d2d.simulator import simulate as run_simulation
-from d2d.simulator.cdc import cdc_ground_truth
+from d2d.simulator import write_cdc, write_ground_truth, write_snapshots
+from d2d.simulator.cdc import mirror_cdc_state, plan_cdc
 
 app = typer.Typer(no_args_is_help=True, help="Data to Decision with AI (D2D)")
 eval_app = typer.Typer(no_args_is_help=True, help="Deterministic evals against ground truth.")
 app.add_typer(eval_app, name="eval")
 review_app = typer.Typer(no_args_is_help=True, help="Stages 5-6: review queue, labels, cases.")
 app.add_typer(review_app, name="review")
+feedback_app = typer.Typer(no_args_is_help=True, help="Stage 12: route feedback, export evals.")
+app.add_typer(feedback_app, name="feedback")
 user_app = typer.Typer(
     no_args_is_help=True,
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
@@ -120,19 +128,24 @@ def simulate(
         seed=seed if seed is not None else pipeline.seed,
         scenario_ids=set(scenario) if scenario else None,
     )
-    partitions = write_snapshots(result.rows, data_dir)
     sim_start = parse_utc(start) if start else pipeline.start
     sim_days = days if days is not None else pipeline.days
-    cdc = generate_cdc(
-        household, start=sim_start, days=sim_days, seed=seed if seed is not None else pipeline.seed
+    cdc = plan_cdc(
+        household,
+        start=sim_start,
+        days=sim_days,
+        seed=seed if seed is not None else pipeline.seed,
+        cadence_minutes=pipeline.cadence_minutes,
     )
-    cdc_path = write_cdc(cdc, data_dir)
-    truth = result.ground_truth + cdc_ground_truth(household, start=sim_start, days=sim_days)
+    mirror_cdc_state(result.rows, cdc.true_rows, household)
+    partitions = write_snapshots(result.rows, data_dir)
+    cdc_path = write_cdc(cdc.rows, data_dir)
+    truth = result.ground_truth + cdc.truth
     gt_path = write_ground_truth(truth, data_dir)
     gt_events = sum(len(s["events"]) for s in truth)
     typer.echo(
         f"{partitions} snapshot runs, {len(result.rows)} rows -> {data_dir / 'snapshots'}\n"
-        f"{len(cdc)} CDC events -> {cdc_path}\n"
+        f"{len(cdc.rows)} CDC events -> {cdc_path}\n"
         f"{len(truth)} scenarios, {gt_events} ground-truth events -> {gt_path}"
     )
 
@@ -141,11 +154,13 @@ def simulate(
 def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
     """Stages 2-4: semantic changelog, change events and linked change stories."""
     cfg_dir = config_dir(config)
+    household = load_household(cfg_dir / "household.toml")
     s = run_pipeline(
         data_dir,
         load_semantics(cfg_dir / "semantics.toml"),
         load_linking(cfg_dir / "linking.toml"),
-        load_household(cfg_dir / "household.toml").id,
+        household.id,
+        household.timezone,
     )
     kinds = ", ".join(f"{k}={v}" for k, v in s.by_kind.items())
     typer.echo(f"{s.snapshot_rows} snapshot rows -> {s.changes} changes -> {s.events} events")
@@ -424,11 +439,89 @@ def user_list(env: EnvOpt = None, users_file: UsersFileOpt = None) -> None:
     typer.echo(f"{len(users.users())} users in {users.path}")
 
 
+def _ontology(cfg_dir: Path, data_dir: Path, engine: Engine) -> Ontology:
+    return Ontology(
+        engine,
+        load_household(cfg_dir / "household.toml"),
+        load_categories(cfg_dir / "categories.toml"),
+        load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml"),
+        data_dir,
+    )
+
+
+@app.command()
+def notify(
+    data_dir: DataDir = Path("data"), config: ConfigDir = None, database_url: DatabaseUrl = None
+) -> None:
+    """Stage 9 notifications: one per new published story; push via ntfy when configured."""
+    cfg_dir = config_dir(config)
+    engine = _engine(database_url)
+    onto = _ontology(cfg_dir, data_dir, engine)
+    owner = Scope(load_roles(cfg_dir / "roles.toml")["owner"], onto.household, onto.taxonomy)
+    sender = sender_from_env()
+    with _db_errors():
+        s = run_notifications(onto, owner, load_notify(cfg_dir / "notifications.toml"), sender)
+    channel = "ntfy" if sender else "no push channel (set D2D_NTFY_URL/D2D_NTFY_TOPIC)"
+    typer.echo(
+        f"notifications: {s.new} new, {s.sent} sent, {s.deferred} deferred (quiet hours), "
+        f"{s.recorded} recorded, {s.failed} failed, {s.backfill} backfill [{channel}]"
+    )
+
+
+@feedback_app.command("route")
+def feedback_route(database_url: DatabaseUrl = None) -> None:
+    """Route new feedback to labels, eval sets, data reports or the UX inbox."""
+    engine = _engine(database_url)
+    with _db_errors():
+        counts = route_feedback(engine)
+    routed = ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "nothing new"
+    typer.echo(f"feedback routed: {routed}")
+
+
+@feedback_app.command("mark-exported")
+def feedback_mark_exported(
+    summary: Annotated[Path, typer.Option(help="summary.json written by `d2d calibrate`.")],
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Mark the eval items of a calibration run as exported (after its branch was pushed)."""
+    ids = [int(i) for i in json.loads(summary.read_text("utf-8")).get("item_ids", [])]
+    engine = _engine(database_url)
+    with _db_errors():
+        mark_exported(engine, ids)
+    typer.echo(f"{len(ids)} eval items marked exported")
+
+
+@app.command("calibrate")
+def calibrate_cmd(
+    out: Annotated[Path, typer.Option(help="Proposal directory (report.md, summary.json, ...).")],
+    data_dir: DataDir = Path("data"),
+    models_dir: ModelsDir = Path("models"),
+    golden: Annotated[Path, typer.Option(help="Frozen golden stories.")] = Path(
+        "evals/golden/stories.jsonl"
+    ),
+    no_db: Annotated[bool, typer.Option("--no-db", help="Skip feedback export.")] = False,
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Nightly calibration: propose linking windows, compare a retrained model, export evals."""
+    cfg_dir = config_dir(config)
+    engine = None if no_db else _engine(database_url)
+    home_id = load_household(cfg_dir / "household.toml").id
+    with _db_errors():
+        s = calibrate(data_dir, cfg_dir, models_dir, golden, home_id, out, engine)
+    best, cur = s["linking"]["best"], s["linking"]["current"]
+    typer.echo(
+        f"linking F1 {cur['pair_f1']:.3f} -> {best['pair_f1']:.3f} "
+        f"({'proposal' if s['linking']['changed'] else 'no change'}); "
+        f"eval items {sum(s['eval_items'].values())}; report -> {out / 'report.md'}"
+    )
+
+
 @app.command("launchd-plist")
 def launchd_plist(
     env: Annotated[str, typer.Option(help="Environment: staging or production.")],
     env_dir: Annotated[Path, typer.Option(help="Environment root, e.g. ~/d2d/production.")],
-    service: Annotated[str, typer.Option(help="pipeline (scheduled) or api (always on).")] = (
+    service: Annotated[str, typer.Option(help="pipeline, api (always on) or backup (daily).")] = (
         "pipeline"
     ),
     config: ConfigDir = None,
@@ -438,10 +531,12 @@ def launchd_plist(
     try:
         if service == "api":
             xml = api_plist(env, env_dir)
+        elif service == "backup":
+            xml = backup_plist(env, env_dir)
         elif service == "pipeline":
             xml = pipeline_plist(env, env_dir, pipeline.cadence_minutes)
         else:
-            raise ValueError(f"unknown service {service!r}, expected pipeline or api")
+            raise ValueError(f"unknown service {service!r}, expected pipeline, api or backup")
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(xml.decode("utf-8"), nl=False)

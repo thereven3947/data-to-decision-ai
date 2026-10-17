@@ -91,3 +91,12 @@ def test_api_plist_keeps_the_api_running() -> None:
         ],
     )
     assert result.exit_code == 0 and "com.d2d.api.staging" in result.output
+
+
+def test_backup_plist_runs_daily() -> None:
+    from d2d.ops import backup_label, backup_plist
+
+    agent = plistlib.loads(backup_plist("production", Path("/Users/me/d2d/production")))
+    assert agent["Label"] == backup_label("production") == "com.d2d.backup.production"
+    assert agent["StartCalendarInterval"] == {"Hour": 3, "Minute": 30}
+    assert agent["ProgramArguments"][1].endswith("/current/deploy/backup.sh")

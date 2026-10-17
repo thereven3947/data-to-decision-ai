@@ -183,38 +183,36 @@ id = "M5-03"
 milestone = "M5"
 title = "Context rules: duration, policy zone (away_mode, quiet_hours), sequence"
 size = "M"
+status = "done"
 depends_on = ["M5-02"]
-acceptance = [
-  "garage open > 30 min, light on > 4 h while away, motion while away",
-  "doorbell ring -> person_detected -> no answer in 2 min = missed_visitor",
-  "Thresholds and windows live in config, not code",
-]
+acceptance = ["Duration, policy-zone (away_mode, quiet_hours) and sequence (missed visitor) rules in semantics.toml", "Each rule fires once per device per episode"]
 
 [[issue]]
 id = "M5-04"
 milestone = "M5"
 title = "Scenarios + ground truth: package_delivery, garage_left_open_overnight, lights_left_on_away, motion_while_away, doorbell_battery_low, camera_offline, lighting_automation_changed"
 size = "M"
+status = "done"
 depends_on = ["M5-03"]
-acceptance = ["d2d eval changelog recall 1.0 / precision 1.0 including CDC scenarios"]
+acceptance = ["8 CDC scenarios + lighting automation scenario with ground truth", "d2d eval changelog recall 1.0 / precision 1.0; linking precision 1.0"]
 
 [[issue]]
 id = "M5-05"
 milestone = "M5"
 title = "Notification stories: severity (info/notice/alert), ntfy push, quiet hours, one push per story"
 size = "M"
+status = "done"
 depends_on = ["M3-01", "M4-03", "M5-04"]
+acceptance = ["Severity per category (info/notice/alert), quiet hours for notices", "One notification per story; first run backfills without pushing; ntfy push when configured"]
 
 [[issue]]
 id = "M5-06"
 milestone = "M5"
 title = "dq.cdc_gap: reconcile CDC changes with the snapshot diff (missed or phantom CDC events)"
 size = "S"
+status = "done"
 depends_on = ["M5-02"]
-acceptance = [
-  "For CDC devices, each snapshot-to-snapshot property change has a matching CDC change in that interval",
-  "Mismatches emit dq.cdc_gap data-quality changes; scenario with a dropped CDC row is detected",
-]
+acceptance = ["Snapshot state of mirrored devices reconciled with the CDC feed", "Dropped CDC row scenario detected as dq.cdc_gap"]
 
 # --- later (split into issues when the milestone starts) --------------------------------------
 [[issue]]
@@ -267,4 +265,6 @@ id = "M11-01"
 milestone = "M11"
 title = "Feedback routing, nightly calibration PRs, KPI dashboard"
 size = "L"
+status = "done"
 depends_on = ["M10-01"]
+acceptance = ["Feedback routed to labels, eval sets, data reports or UX inbox", "Owner Insights dashboard", "Nightly calibration proposal via branch + issue; never auto-applied", "Nightly Postgres backups"]

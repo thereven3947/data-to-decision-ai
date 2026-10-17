@@ -21,6 +21,7 @@ from d2d.db import (
     change_story,
     change_story_event,
     label,
+    notification,
     review_item,
 )
 from d2d.enrichment import EnrichmentConfig, display_name, enrich
@@ -150,6 +151,7 @@ class Ontology:
                 view["labels"] = self._labels(story_id) if scope.policy.can_label else []
                 view["cases"] = self._cases_for(story_id)
                 view["review"] = self._review(story_id)
+                view["notification"] = self._notification(story_id)
                 return view
         return None
 
@@ -171,6 +173,22 @@ class Ontology:
         with self.engine.connect() as conn:
             r = (
                 conn.execute(select(review_item).where(review_item.c.story_id == story_id))
+                .mappings()
+                .first()
+            )
+            return dict(r) if r else None
+
+    def _notification(self, story_id: str) -> dict[str, Any] | None:
+        with self.engine.connect() as conn:
+            r = (
+                conn.execute(
+                    select(
+                        notification.c.severity,
+                        notification.c.channel,
+                        notification.c.status,
+                        notification.c.sent_at,
+                    ).where(notification.c.story_id == story_id)
+                )
                 .mappings()
                 .first()
             )

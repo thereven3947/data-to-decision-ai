@@ -78,7 +78,7 @@ def test_migrations_round_trip_and_match_metadata(
             opts={
                 "include_schemas": True,
                 "include_name": lambda name, type_, _: (
-                    type_ != "schema" or name in {"ontology", "hitl", "feedback"}
+                    type_ != "schema" or name in {"ontology", "hitl", "feedback", "notify"}
                 ),
             },
         )
@@ -89,7 +89,7 @@ def test_migrations_round_trip_and_match_metadata(
         assert (
             conn.exec_driver_sql(
                 "SELECT count(*) FROM information_schema.schemata "
-                "WHERE schema_name IN ('ontology', 'hitl', 'feedback')"
+                "WHERE schema_name IN ('ontology', 'hitl', 'feedback', 'notify')"
             ).scalar_one()
             == 0
         )

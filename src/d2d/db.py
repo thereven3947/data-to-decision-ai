@@ -234,6 +234,9 @@ feedback = Table(
     Column("user_role", Text, nullable=False),
     Column("username", Text),
     Column("page", Text),
+    # M11 routing: where this feedback went (labels, linking, enrichment, ...)
+    Column("routed_to", Text),
+    Column("routed_at", DateTime(timezone=True)),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint("target_type IN ('story', 'message', 'page')", name="target_type"),
     CheckConstraint("rating IN ('up', 'down', 'comment')", name="rating"),
@@ -336,3 +339,52 @@ def load_run(engine: Engine, data_dir: Path, household: Household) -> LoadSummar
         if links:
             conn.execute(insert(change_story_event), links)
     return LoadSummary(len(devices), len(events), len(stories), removed)
+
+
+eval_item = Table(
+    "eval_item",
+    metadata,
+    Column("item_id", BigInteger, Identity(), primary_key=True),
+    Column("set_name", Text, nullable=False),
+    Column(
+        "feedback_id", BigInteger, ForeignKey("feedback.feedback.feedback_id", ondelete="SET NULL")
+    ),
+    Column("payload", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("exported_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "set_name IN ('linking', 'enrichment', 'conversations', 'labels', 'data', 'ux')",
+        name="set_name",
+    ),
+    Index(None, "set_name"),
+    schema=FEEDBACK,
+)
+
+NOTIFY = "notify"
+SEVERITIES = ("info", "notice", "alert")
+
+notification = Table(
+    "notification",
+    metadata,
+    Column(
+        "story_id",
+        Text,
+        ForeignKey("ontology.change_story.story_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("severity", Text, nullable=False),
+    Column("channel", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("error", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("sent_at", DateTime(timezone=True)),
+    CheckConstraint("severity IN ('info', 'notice', 'alert')", name="severity"),
+    CheckConstraint("channel IN ('push', 'digest')", name="channel"),
+    CheckConstraint(
+        "status IN ('pending', 'sent', 'deferred', 'recorded', 'failed', 'backfill')", name="status"
+    ),
+    schema=NOTIFY,
+)

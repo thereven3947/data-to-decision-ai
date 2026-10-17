@@ -27,6 +27,9 @@ Feedback rows store the lineage of the thing being rated (see [architecture](arc
 | Unhelpful answer / grounding failure | 11 Agent skills | Adds conversation to skill eval set | Skill PR |
 | Action item rejected | 11 Playbook | Logs reason against playbook step | Playbook PR |
 
+Routing runs every pipeline cycle (`d2d feedback route`): eval items are stored in
+`feedback.eval_item` and exported by the nightly job; `wrong_category` re-queues the story for review.
+
 ## Nightly calibration job
 
 Runs on the Mac mini (self-hosted runner, scheduled workflow) at 02:00 local:

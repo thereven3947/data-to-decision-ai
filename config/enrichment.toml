@@ -41,8 +41,8 @@ title = "Safety setting changed on {{ devices | join(', ') }}"
 summary = "{% for c in facts.settings %}{{ c.device }} {{ c.setting }}: {{ c.from }} → {{ c.to }}{{ '; ' if not loop.last }}{% endfor %} at {{ start }}."
 
 [template.fault_degradation]
-title = "{{ devices | join(', ') }}: {{ facts.error_episodes }} error episode{{ 's' if facts.error_episodes != 1 }}{% if facts.offline_episodes %}, {{ facts.offline_episodes }} offline{% endif %}"
-summary = "{{ devices | join(', ') }} reported error code{{ 's' if facts.error_codes | length != 1 }} {{ facts.error_codes | join(', ') }} {{ facts.error_episodes }} time{{ 's' if facts.error_episodes != 1 }}{% if facts.offline_episodes %} and went offline {{ facts.offline_episodes }} time{{ 's' if facts.offline_episodes != 1 }}{% endif %} between {{ start }} and {{ end }}."
+title = "{{ devices | join(', ') }}: {% set parts = [] %}{% if facts.error_episodes %}{% set _ = parts.append(facts.error_episodes ~ ' error episode' ~ ('s' if facts.error_episodes != 1 else '')) %}{% endif %}{% if facts.offline_episodes %}{% set _ = parts.append(facts.offline_episodes ~ ' offline') %}{% endif %}{% if facts.battery_low %}{% set _ = parts.append('battery low') %}{% endif %}{{ parts | join(', ') }}"
+summary = "{% if facts.error_episodes %}{{ devices | join(', ') }} reported error code{{ 's' if facts.error_codes | length != 1 }} {{ facts.error_codes | join(', ') }} {{ facts.error_episodes }} time{{ 's' if facts.error_episodes != 1 }}{% if facts.offline_episodes %} and went offline {{ facts.offline_episodes }} time{{ 's' if facts.offline_episodes != 1 }}{% endif %} between {{ start }} and {{ end }}.{% elif facts.offline_episodes %}{{ devices | join(', ') }} went offline at {{ start }}{% if event_count > 1 %} and came back at {{ end }}{% endif %}.{% endif %}{% if facts.battery_low %} {{ devices | join(', ') }} reported a low battery at {{ start }}.{% endif %}"
 
 [template.data_error]
 title = "Data issue on {{ devices | join(', ') }}: {{ facts.issues | join(', ') }}"
@@ -54,4 +54,16 @@ summary = "{% if facts.added %}{{ facts.added | join(', ') }} appeared{% endif %
 
 [template.access_left_open]
 title = "{{ devices | join(', ') }} left open"
-summary = "{{ devices | join(', ') }} stayed open longer than the threshold ({{ facts.state }}), detected at {{ start }}."
+summary = "{{ devices | join(', ') }}{% if facts.quiet_hours %} was opened at {{ start }} during quiet hours and{% endif %} stayed open longer than the threshold ({{ facts.state }}), detected at {{ end }}."
+
+[template.security_event]
+title = "Motion at {{ devices | join(', ') }} while nobody was home"
+summary = "{{ devices | join(', ') }} detected {{ facts.signals | join(' and ') }} at {{ start }} while away mode was on."
+
+[template.visitor_activity]
+title = "{% if facts.missed %}Missed visitor at the front door{% elif facts.package %}Package delivered at the front door{% else %}Visitor at the front door{% endif %}"
+summary = "{% if facts.missed %}A visitor rang the doorbell and was seen by the camera, but nobody answered within 2 minutes (detected at {{ start }}).{% elif facts.package %}{{ devices | join(', ') }} detected a package at {{ start }}.{% else %}Doorbell activity at {{ start }}.{% endif %}"
+
+[template.lighting_change]
+title = "{% if facts.left_on %}{{ devices | join(', ') }} left on while away{% else %}{{ devices | join(', ') }} automation changed{% endif %}"
+summary = "{% if facts.left_on %}{{ devices | join(', ') }} stayed on for more than 4 hours while nobody was home (detected at {{ start }}).{% endif %}{% for c in facts.schedule %}{{ c.device }} automation {{ c.field }} moved from {{ c.from }} to {{ c.to }} at {{ start }}{{ '; ' if not loop.last else '.' }}{% endfor %}"

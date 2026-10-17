@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
-import { api, post, type ChatAnswer, type Health, type Meta } from '../api'
+import { api, IS_DEMO, post, type ChatAnswer, type Health, type Meta } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
 import { linkCitations } from '../format'
 
@@ -67,6 +67,12 @@ export default function Ask() {
         {turns.length > 0 && <button type="button" className="secondary" onClick={newChat}>New chat</button>}
       </header>
 
+      {IS_DEMO && (
+        <p className="notice">
+          Static demo: the suggested questions replay real answers recorded from the local Copilot. Free-form questions
+          need the live private beta.
+        </p>
+      )}
       {health.data && !health.data.llm_available && (
         <p className="notice">The local LLM is not reachable, so answers fall back to a data summary.</p>
       )}

@@ -73,7 +73,7 @@ export default function Root() {
 
   return (
     <QueryClientProvider client={clientFor(role)} key={`${user?.username ?? '-'}:${role}`}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}>
         <App role={role} onRoleChange={changeRole} canSwitch={canSwitch} user={user} onLogout={logout} />
       </BrowserRouter>
     </QueryClientProvider>

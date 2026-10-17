@@ -90,6 +90,7 @@ export interface StoryDetail extends Story {
   labels: LabelRow[]
   cases: { case_id: number; title: string; status: string }[]
   review: ReviewInfo | null
+  notification: { severity: 'info' | 'notice' | 'alert'; channel: string; status: string; sent_at: string | null } | null
 }
 
 export interface Device extends DeviceRef {
@@ -198,7 +199,13 @@ export class ApiError extends Error {
   }
 }
 
+export const IS_DEMO = import.meta.env.VITE_DEMO === '1'
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  if (IS_DEMO) {
+    const { demoApi } = await import('./demo')
+    return demoApi<T>(path, previewRole ?? 'owner', init)
+  }
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: {

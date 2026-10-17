@@ -108,6 +108,11 @@ activate() {
     launchctl bootout "$DOMAIN/$API_LABEL" 2>/dev/null || true
     return 0
   fi
+  if [ -f "$rel/deploy/backup.sh" ]; then
+    log "launchd agent com.d2d.backup.$ENV_NAME (daily Postgres backup)"
+    install_agent "$rel" "com.d2d.backup.$ENV_NAME" \
+      "$HOME/Library/LaunchAgents/com.d2d.backup.$ENV_NAME.plist" backup || return 1
+  fi
   log "launchd agent $API_LABEL"
   install_agent "$rel" "$API_LABEL" "$API_AGENT" api || return 1
   port=$(api_port)
