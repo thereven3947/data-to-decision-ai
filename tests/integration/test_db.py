@@ -77,7 +77,9 @@ def test_migrations_round_trip_and_match_metadata(
             conn,
             opts={
                 "include_schemas": True,
-                "include_name": lambda name, type_, _: type_ != "schema" or name == "ontology",
+                "include_name": lambda name, type_, _: (
+                    type_ != "schema" or name in {"ontology", "hitl", "feedback"}
+                ),
             },
         )
         assert compare_metadata(ctx, metadata) == []
@@ -86,7 +88,8 @@ def test_migrations_round_trip_and_match_metadata(
     with engine.connect() as conn:
         assert (
             conn.exec_driver_sql(
-                "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'ontology'"
+                "SELECT count(*) FROM information_schema.schemata "
+                "WHERE schema_name IN ('ontology', 'hitl', 'feedback')"
             ).scalar_one()
             == 0
         )

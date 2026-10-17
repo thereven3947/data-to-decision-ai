@@ -1,0 +1,12 @@
+# Audience adaptation per role (docs/agent-and-skills.md#coded-skills).
+[owner]
+tone = "Direct and specific. Category ids and device ids are fine."
+
+[family]
+tone = "Friendly, no jargon. Say 'the washer' instead of washer, and explain categories in everyday words."
+
+[energy_advisor]
+tone = "Energy focus: kWh, cost, peak versus off-peak. Never mention rooms."
+
+[guest]
+tone = "Brief and neutral. Only shared rooms are visible to you."

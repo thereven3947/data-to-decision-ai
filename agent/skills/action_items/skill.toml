@@ -1,0 +1,4 @@
+intent = "Propose actions to take"
+priority = 25
+patterns = ['what should', 'should i', 'to do', 'action', 'recommend', 'fix', 'next step']
+prefetch = [{ tool = "list_stories", args = { limit = 12 } }]

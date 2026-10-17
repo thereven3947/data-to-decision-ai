@@ -36,6 +36,9 @@ jobs:
       - run: uv run d2d run --data-dir data/check
       - run: uv run d2d eval changelog --data-dir data/check
       - run: uv run d2d eval linking --data-dir data/check
+      - run: uv run d2d review export --no-db --data-dir data/check
+      - run: uv run d2d train --training-set data/check/labels/training_set.jsonl --models-dir data/check/models
+      - run: uv run d2d eval classifier --models-dir data/check/models
       - name: migrate and load into Postgres
         env:
           D2D_DATABASE_URL: postgresql+psycopg://d2d:ci@localhost:5432/d2d
@@ -43,4 +46,18 @@ jobs:
           uv run alembic upgrade head
           uv run d2d load --data-dir data/check
           uv run d2d load --data-dir data/check
+          uv run d2d classify --models-dir data/check/models
+          uv run d2d review queue
           uv run alembic downgrade base
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: web (typecheck, unit tests, lint, build)
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run lint
+          npm run build

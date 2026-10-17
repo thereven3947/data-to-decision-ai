@@ -1,0 +1,4 @@
+intent = "Anything else about the household data"
+priority = 99
+patterns = []
+prefetch = [{ tool = "get_kpis", args = {} }]

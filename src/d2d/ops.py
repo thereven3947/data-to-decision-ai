@@ -33,3 +33,32 @@ def pipeline_plist(env: str, env_dir: Path, cadence_minutes: int) -> bytes:
         "StandardErrorPath": str(logs / "pipeline.log"),
     }
     return plistlib.dumps(agent)
+
+
+API_PORTS = {"production": 8080, "staging": 8081}
+
+
+def api_label(env: str) -> str:
+    return f"com.d2d.api.{env}"
+
+
+def api_plist(env: str, env_dir: Path) -> bytes:
+    """launchd agent that keeps ``deploy/api.sh`` (API + agent + web UI) running."""
+    if env not in ENVIRONMENTS:
+        raise ValueError(f"unknown environment {env!r}, expected one of {ENVIRONMENTS}")
+    logs = env_dir / "logs"
+    agent = {
+        "Label": api_label(env),
+        "ProgramArguments": [
+            "/bin/bash",
+            str(env_dir / "current" / "deploy" / "api.sh"),
+            str(env_dir),
+        ],
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ThrottleInterval": 10,
+        "ProcessType": "Interactive",
+        "StandardOutPath": str(logs / "api.log"),
+        "StandardErrorPath": str(logs / "api.log"),
+    }
+    return plistlib.dumps(agent)

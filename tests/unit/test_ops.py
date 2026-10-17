@@ -62,3 +62,32 @@ def test_launchd_plist_cli_rejects_unknown_env(tmp_path: Path) -> None:
 )
 def test_deploy_scripts_are_valid_bash(script: str) -> None:
     subprocess.run(["bash", "-n", str(ROOT / script)], check=True)
+
+
+def test_api_plist_keeps_the_api_running() -> None:
+    from d2d.ops import api_label, api_plist
+
+    env_dir = Path("/Users/me/d2d/staging")
+    agent = plistlib.loads(api_plist("staging", env_dir))
+    assert agent["Label"] == api_label("staging") == "com.d2d.api.staging"
+    assert agent["KeepAlive"] is True and agent["RunAtLoad"] is True
+    assert agent["ProgramArguments"][1] == "/Users/me/d2d/staging/current/deploy/api.sh"
+    assert agent["StandardOutPath"] == "/Users/me/d2d/staging/logs/api.log"
+    with pytest.raises(ValueError):
+        api_plist("dev", env_dir)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "launchd-plist",
+            "--env",
+            "staging",
+            "--env-dir",
+            str(env_dir),
+            "--service",
+            "api",
+            "--config",
+            str(ROOT / "config"),
+        ],
+    )
+    assert result.exit_code == 0 and "com.d2d.api.staging" in result.output

@@ -80,7 +80,7 @@ flowchart TB
   subgraph MAC["Mac mini (prod)"]
     RUN["Self-hosted runner<br/>LLM evals · deploy"]
     OLL["Ollama (native, Metal GPU)"]
-    DC["docker compose: Postgres · API · web"]
+    DC["docker compose: Postgres<br/>launchd: API + web UI (native, reaches Ollama)"]
     JOBS["launchd: pipeline schedule · nightly calibration"]
     CF["cloudflared tunnel"]
   end

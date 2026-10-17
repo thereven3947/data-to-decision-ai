@@ -1,0 +1,10 @@
+# Copilot agent (stage 11). See docs/agent-and-skills.md.
+# D2D_OLLAMA_URL / D2D_LLM_MODEL override base_url / model (e.g. qwen3:8b for speed).
+[llm]
+provider = "ollama"
+base_url = "http://127.0.0.1:11434"
+model = "qwen3:14b"
+timeout_s = 180
+num_ctx = 8192
+temperature = 0.2
+max_tool_calls = 6

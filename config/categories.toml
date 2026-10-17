@@ -1,0 +1,147 @@
+# Category taxonomy (stage 5, human-owned). See docs/domain-model.md#category-taxonomy-stage-5-human-owned.
+# energy = true: visible to the energy_advisor role. playbook = checks and actions used by the UI and
+# (later) the Copilot. plain = one-line plain-language summary for non-technical readers.
+
+[review]
+# Share of confidently auto-labeled stories that still go to the review queue (deterministic by id).
+audit_rate = 0.2
+
+[[category]]
+id = "firmware_rollout"
+name = "Firmware rollout"
+grid_analogue = "Equipment upgrade campaign"
+definition = "The same firmware version is installed on several devices within a day."
+plain = "Several devices installed the same software update."
+energy = false
+checks = ["Confirm the version is the vendor's current stable release", "Check devices came back online after the update"]
+actions = ["Note the rollout in the device log", "Watch the updated devices for errors over the next 24 h"]
+
+[[category]]
+id = "load_shift"
+name = "Load shift"
+grid_analogue = "Load transfer"
+definition = "Appliance schedules are moved out of the peak-tariff window."
+plain = "Appliance schedules were moved to cheaper hours."
+energy = true
+checks = ["Confirm the new window is off-peak", "Check that cycles still finish before they are needed"]
+actions = ["Keep the new schedule", "Apply the same shift to other flexible appliances"]
+
+[[category]]
+id = "circuit_reassignment"
+name = "Circuit reassignment"
+grid_analogue = "Sectionalize"
+definition = "A device moves to a different breaker circuit or plug."
+plain = "A device was plugged into a different circuit."
+energy = true
+checks = ["Check the new circuit rating covers the device load", "Confirm nothing else large shares the circuit"]
+actions = ["Update the panel labels", "Move the device back if the circuit is overloaded"]
+
+[[category]]
+id = "device_replacement"
+name = "Device replacement"
+grid_analogue = "Underground conversion"
+definition = "A device is removed and a device of the same kind appears in the same room."
+plain = "An old device was replaced by a new one."
+energy = false
+checks = ["Confirm the old device was retired on purpose", "Copy schedules and safety settings to the new device"]
+actions = ["Record the replacement", "Remove the old device from automations"]
+
+[[category]]
+id = "network_change"
+name = "Network change"
+grid_analogue = "Communications change"
+definition = "A router or hub change moves many devices to another network, usually with an RSSI shift."
+plain = "Several devices moved to a different Wi-Fi access point."
+energy = false
+checks = ["Check signal strength improved or stayed acceptable", "Confirm no device dropped offline"]
+actions = ["Record the new network layout", "Retire the old access point if unused"]
+
+[[category]]
+id = "weather_dr_response"
+name = "Weather / demand-response response"
+grid_analogue = "MET / weather event"
+definition = "Setpoints and schedules change during a heat wave or utility demand-response window."
+plain = "Heating, cooling or charging was adjusted for hot weather or a utility request."
+energy = true
+checks = ["Confirm the change matches the utility event window", "Check settings were restored afterwards"]
+actions = ["Keep the demand-response automation", "Restore settings that did not revert"]
+
+[[category]]
+id = "safety_setting_change"
+name = "Safety setting change"
+grid_analogue = "Protection setting change"
+definition = "Child lock, maximum temperature, auto-off timers or similar safety settings changed."
+plain = "A safety setting was changed."
+energy = false
+checks = ["Confirm who changed the setting and why", "Check the new value is within safe limits"]
+actions = ["Revert the setting if the change was not intended", "Record the reason for the change"]
+
+[[category]]
+id = "fault_degradation"
+name = "Fault / degradation"
+grid_analogue = "Equipment failure"
+definition = "Error codes, repeated offline periods or rising runtime point to a failing device."
+plain = "A device keeps reporting errors or dropping offline."
+energy = true
+checks = ["Look up the error code", "Check whether errors are getting more frequent"]
+actions = ["Book a service visit", "Avoid unattended runs until the device is checked"]
+
+[[category]]
+id = "data_error"
+name = "Data error"
+grid_analogue = "Data error"
+definition = "Impossible values, clock jumps, duplicate rows or unit changes in device data."
+plain = "The data from a device looks wrong, not the device itself."
+energy = false
+checks = ["Check the device clock and time sync", "Look for duplicate integrations of the same device"]
+actions = ["Fix the integration or clock", "Exclude the bad rows from reports"]
+
+[[category]]
+id = "device_added_removed"
+name = "Device added / removed"
+grid_analogue = "New service / retirement"
+definition = "A device appears or disappears without a matching replacement."
+plain = "A new device was added, or a device was removed."
+energy = false
+checks = ["Confirm the device is known to the household", "Assign the device to a room and circuit"]
+actions = ["Name and tag the new device", "Remove a retired device from automations"]
+
+[[category]]
+id = "security_event"
+name = "Security event"
+grid_analogue = "Intrusion / CCTV alarm"
+definition = "Motion or a person is detected while away mode or quiet hours are active."
+plain = "Someone or something was detected while nobody was supposed to be home."
+energy = false
+checks = ["Review the camera clip", "Confirm whether anyone was expected"]
+actions = ["Contact the household", "Adjust motion zones if it was a false alarm"]
+
+[[category]]
+id = "access_left_open"
+name = "Access left open"
+grid_analogue = "Abnormal switching state"
+definition = "A garage or door stays open longer than the configured threshold."
+plain = "The garage or a door was left open."
+energy = false
+checks = ["Check whether the door is still open", "Check the auto-close timer"]
+actions = ["Close the door remotely", "Enable or shorten the auto-close timer"]
+
+[[category]]
+id = "visitor_activity"
+name = "Visitor activity"
+grid_analogue = "Customer call"
+definition = "Doorbell ring with person detected, a missed visitor, or a package delivery."
+plain = "Someone came to the door."
+energy = false
+checks = ["Review the doorbell clip", "Check for a delivered package"]
+actions = ["Call back a missed visitor", "Bring in the package"]
+
+[[category]]
+id = "lighting_change"
+name = "Lighting change"
+grid_analogue = "Switching plan change"
+definition = "A light automation changed, or lights stayed on while nobody was home."
+plain = "Lighting automations changed, or lights were left on."
+energy = true
+checks = ["Confirm the automation change was intended", "Check which lights are still on"]
+actions = ["Turn off lights left on", "Restore the previous automation"]

@@ -14,12 +14,15 @@ from typing import Any
 import pyarrow.parquet as pq
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
     Engine,
+    Float,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     MetaData,
@@ -29,7 +32,7 @@ from sqlalchemy import (
     delete,
     func,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.engine import URL, Connection, make_url
 
 from d2d.config import ConfigError, Household
@@ -97,7 +100,13 @@ change_story = Table(
     Column("linking_config_sha", Text, nullable=False),
     Column("status", Text, nullable=False, server_default="new"),
     Column("loaded_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    # Current label (latest row in hitl.label); denormalized for the API and the review queue.
+    Column("category", Text),
+    Column("confidence", Float),
+    Column("label_source", Text),
+    Column("model_version", Text),
     CheckConstraint("status IN ('new', 'needs_review', 'published', 'closed')", name="status"),
+    CheckConstraint("label_source IN ('human', 'model', 'sim_reviewer')", name="label_source"),
     Index(None, "window_start"),
 )
 
@@ -112,6 +121,122 @@ change_story_event = Table(
     ),
     Column("event_id", Text, ForeignKey("ontology.change_event.event_id"), primary_key=True),
     Index(None, "event_id"),
+)
+
+HITL = "hitl"
+LABEL_SOURCES = ("human", "model", "sim_reviewer")
+REVIEW_REASONS = ("abstain", "audit", "feedback")
+_STORY_FK = "ontology.change_story.story_id"
+
+label = Table(
+    "label",
+    metadata,
+    Column("label_id", BigInteger, Identity(), primary_key=True),
+    Column("story_id", Text, ForeignKey(_STORY_FK, ondelete="CASCADE"), nullable=False),
+    Column("category", Text, nullable=False),
+    Column("source", Text, nullable=False),
+    Column("confidence", Float),
+    Column("reviewer", Text),
+    Column("note", Text),
+    Column("model_version", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("source IN ('human', 'model', 'sim_reviewer')", name="source"),
+    Index(None, "story_id"),
+    schema=HITL,
+)
+
+review_item = Table(
+    "review_item",
+    metadata,
+    Column("story_id", Text, ForeignKey(_STORY_FK, ondelete="CASCADE"), primary_key=True),
+    Column("reason", Text, nullable=False),
+    Column("suggested_category", Text),
+    Column("suggested_confidence", Float),
+    Column("queued_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("resolved_at", DateTime(timezone=True)),
+    Column("resolved_by", Text),
+    CheckConstraint("reason IN ('abstain', 'audit', 'feedback')", name="reason"),
+    schema=HITL,
+)
+
+change_case = Table(
+    "change_case",
+    metadata,
+    Column("case_id", BigInteger, Identity(), primary_key=True),
+    Column("title", Text, nullable=False),
+    Column("status", Text, nullable=False, server_default="open"),
+    Column("note", Text),
+    Column("created_by", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("closed_at", DateTime(timezone=True)),
+    CheckConstraint("status IN ('open', 'closed')", name="status"),
+    schema=HITL,
+)
+
+case_story = Table(
+    "case_story",
+    metadata,
+    Column(
+        "case_id",
+        BigInteger,
+        ForeignKey("hitl.change_case.case_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("story_id", Text, ForeignKey(_STORY_FK, ondelete="CASCADE"), primary_key=True),
+    Column("added_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    schema=HITL,
+)
+
+FEEDBACK = "feedback"
+FEEDBACK_REASONS = (
+    "wrong_category",
+    "wrong_grouping",
+    "unclear_description",
+    "wrong_data",
+    "missing_data",
+    "unhelpful_answer",
+    "wrong_action",
+    "other",
+)
+
+chat_message = Table(
+    "chat_message",
+    metadata,
+    Column("message_id", BigInteger, Identity(), primary_key=True),
+    Column("session_id", Text, nullable=False),
+    Column("user_role", Text, nullable=False),
+    Column("question", Text, nullable=False),
+    Column("answer", Text, nullable=False),
+    Column("skill", Text, nullable=False),
+    Column("skill_sha", Text, nullable=False),
+    Column("llm_model_tag", Text, nullable=False),
+    Column("tool_calls", JSONB, nullable=False),
+    Column("cited_ids", ARRAY(Text), nullable=False),
+    Column("checker_result", JSONB, nullable=False),
+    Column("latency_ms", Integer, nullable=False),
+    Column("tokens_in", Integer),
+    Column("tokens_out", Integer),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Index(None, "session_id"),
+    schema=FEEDBACK,
+)
+
+feedback = Table(
+    "feedback",
+    metadata,
+    Column("feedback_id", BigInteger, Identity(), primary_key=True),
+    Column("target_type", Text, nullable=False),
+    Column("target_id", Text, nullable=False),
+    Column("rating", Text, nullable=False),
+    Column("reason", Text),
+    Column("comment", Text),
+    Column("user_role", Text, nullable=False),
+    Column("page", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("target_type IN ('story', 'message', 'page')", name="target_type"),
+    CheckConstraint("rating IN ('up', 'down', 'comment')", name="rating"),
+    Index(None, "target_type", "target_id"),
+    schema=FEEDBACK,
 )
 
 

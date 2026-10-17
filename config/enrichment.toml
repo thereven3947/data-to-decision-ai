@@ -1,0 +1,57 @@
+# Enrichment (stage 8): plain-language title and summary per category, plus impact inputs.
+# Templates are Jinja2. Numbers are computed by d2d.enrichment (never in a template), so the
+# numeric-correctness test checks the calculators, and the templates only format their output.
+
+[tariff]
+currency = "USD"
+peak_usd_per_kwh = 0.52
+off_peak_usd_per_kwh = 0.28
+voltage = 120
+
+[default]
+title = "{{ event_count }} change{{ 's' if event_count != 1 }} on {{ devices | join(', ') }}"
+summary = "{{ event_count }} linked change{{ 's' if event_count != 1 }} between {{ start }} and {{ end }} on {{ devices | join(', ') }}."
+
+[template.firmware_rollout]
+title = "Firmware {{ facts.to_version }} rolled out to {{ device_count }} device{{ 's' if device_count != 1 }}"
+summary = "{{ devices | join(', ') }} updated firmware from {{ facts.from_version }} to {{ facts.to_version }} between {{ start }} and {{ end }}."
+
+[template.load_shift]
+title = "{{ device_count }} appliance schedule{{ 's' if device_count != 1 }} moved off-peak"
+summary = "{% for s in facts.shifts %}{{ s.device }} now runs {{ s.new_window }} (was {{ s.old_window }}){{ '; ' if not loop.last }}{% endfor %}. About {{ facts.kwh_shifted }} kWh per day moved out of the peak window, saving about ${{ facts.usd_per_day }} per day."
+
+[template.circuit_reassignment]
+title = "{{ devices | join(', ') }} moved to {{ facts.moves[0].to_circuit }}"
+summary = "{% for m in facts.moves %}{{ m.device }} moved from {{ m.from_circuit }} to {{ m.to_circuit }} ({{ m.rated_w }} W on a {{ m.capacity_w }} W circuit, {{ m.load_pct }}% of capacity){{ '; ' if not loop.last }}{% endfor %}."
+
+[template.device_replacement]
+title = "{{ facts.removed | join(', ') }} replaced by {{ facts.added | join(', ') }}"
+summary = "{{ facts.removed | join(', ') }} was removed and {{ facts.added | join(', ') }} was added between {{ start }} and {{ end }}."
+
+[template.network_change]
+title = "{{ facts.devices_moved }} device{{ 's' if facts.devices_moved != 1 }} moved to {{ facts.to_network }}"
+summary = "{{ devices | join(', ') }} moved from {{ facts.from_network }} to {{ facts.to_network }} at {{ start }}. Average signal changed by {{ facts.mean_rssi_gain_db }} dB."
+
+[template.weather_dr_response]
+title = "Comfort and charging settings adjusted from {{ start }} to {{ end }}"
+summary = "{% for s in facts.setpoints %}{{ s.device }} setpoint {{ s.from }} → {{ s.to }}{{ ' (restored)' if s.restored }}{{ '; ' if not loop.last }}{% endfor %}{% if facts.schedule_devices %}. Schedules changed on {{ facts.schedule_devices | join(', ') }}{% endif %}."
+
+[template.safety_setting_change]
+title = "Safety setting changed on {{ devices | join(', ') }}"
+summary = "{% for c in facts.settings %}{{ c.device }} {{ c.setting }}: {{ c.from }} → {{ c.to }}{{ '; ' if not loop.last }}{% endfor %} at {{ start }}."
+
+[template.fault_degradation]
+title = "{{ devices | join(', ') }}: {{ facts.error_episodes }} error episode{{ 's' if facts.error_episodes != 1 }}{% if facts.offline_episodes %}, {{ facts.offline_episodes }} offline{% endif %}"
+summary = "{{ devices | join(', ') }} reported error code{{ 's' if facts.error_codes | length != 1 }} {{ facts.error_codes | join(', ') }} {{ facts.error_episodes }} time{{ 's' if facts.error_episodes != 1 }}{% if facts.offline_episodes %} and went offline {{ facts.offline_episodes }} time{{ 's' if facts.offline_episodes != 1 }}{% endif %} between {{ start }} and {{ end }}."
+
+[template.data_error]
+title = "Data issue on {{ devices | join(', ') }}: {{ facts.issues | join(', ') }}"
+summary = "{% for i in facts.details %}{{ i.device }} {{ i.issue }} ({{ i.value }}){{ '; ' if not loop.last }}{% endfor %} at {{ start }}. The device data looks wrong; the device itself may be fine."
+
+[template.device_added_removed]
+title = "{% if facts.added %}{{ facts.added | join(', ') }} added{% endif %}{% if facts.added and facts.removed %}; {% endif %}{% if facts.removed %}{{ facts.removed | join(', ') }} removed{% endif %}"
+summary = "{% if facts.added %}{{ facts.added | join(', ') }} appeared{% endif %}{% if facts.added and facts.removed %} and {% endif %}{% if facts.removed %}{{ facts.removed | join(', ') }} disappeared{% endif %} at {{ start }} with no matching replacement."
+
+[template.access_left_open]
+title = "{{ devices | join(', ') }} left open"
+summary = "{{ devices | join(', ') }} stayed open longer than the threshold ({{ facts.state }}), detected at {{ start }}."

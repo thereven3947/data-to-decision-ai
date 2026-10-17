@@ -16,7 +16,7 @@
 |---|---|---|---|
 | Purpose | Write code, run tests, ML experiments, act as reviewer | Run the whole system 24/7 | Control plane |
 | Python | `uv` (3.12) | `uv` (3.12) | `astral-sh/setup-uv` |
-| Containers | Docker Desktop (Postgres only) | OrbStack: Postgres, API, web | — |
+| Containers | Docker Desktop (Postgres only) | OrbStack: Postgres (API + web run natively under launchd) | — |
 | LLM | Remote Ollama on Mac mini via Tailscale, or `qwen3:8b` mocked in tests | **Ollama native** (`qwen3:14b`, `nomic-embed-text`) | — |
 | Scheduling | manual `d2d run` | launchd: pipeline every 15 min, calibration 02:00 | scheduled workflow (self-hosted) |
 | Exposure | localhost | Cloudflare Tunnel + Access (no open ports) | — |
@@ -37,7 +37,7 @@ Postgres + API + web ≈ 2 GB → ~16 GB headroom for macOS and training.
 | API | FastAPI + Pydantic v2, SSE for chat streaming |
 | Web | Vite + React + TypeScript, TanStack Query, generated OpenAPI client |
 | LLM | OpenAI-compatible client → Ollama (default) / Anthropic (optional) |
-| CLI | `d2d` (Typer): `simulate`, `run`, `load`, `review`, `train`, `calibrate`, `eval` |
+| CLI | `d2d` (Typer): `simulate`, `run`, `load`, `review`, `train`, `classify`, `serve`, `calibrate`, `eval` |
 | Notifications | ntfy (self-hosted topic) for new high-severity stories |
 
 ## Target repository layout

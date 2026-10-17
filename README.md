@@ -61,18 +61,32 @@ charge of what matters:
 
 ## Status
 
-**M0 Foundations**, **M1 Simulator** and **M2 Changelog & events** are done; next is **M3 Event linking**
-(see the [roadmap](docs/feature-roadmap.md) and [backlog](planning/backlog.toml)).
+The full toy loop runs locally on the Mac mini: simulator → changelog → change events → stories
+(M1–M3), Postgres + deploys (M4), review queue and labels (M6), classifier with abstain (M7),
+enrichment (M8), role-scoped API and the **Change Control web UI** (M9), and the **Copilot agent** on
+local Ollama (M10), with 👍/👎 and page feedback stored for UX research (part of M11). Still open:
+M4-04 (Cloudflare Tunnel), M5-03..06 (more CDC rules/scenarios, notifications) and M11 routing,
+calibration PRs and KPI dashboard. See the [roadmap](docs/feature-roadmap.md) and
+[backlog](planning/backlog.toml). Everything is toy data from the simulator; nothing connects to a
+real home or any company system.
 
-```powershell
-python -m pip install uv     # once
+Run it locally (macOS; Postgres in Docker, Ollama with `qwen3:14b` for the agent):
+
+```bash
 uv sync
-uv run d2d simulate          # 3 days of 15-min snapshots + 12 planted scenarios -> data/
-uv run d2d run               # stages 2-3: semantic changelog + change events
-uv run d2d eval changelog    # score events vs ground truth (exit 1 if a gate fails)
-uv run alembic upgrade head  # optional: Postgres schema (needs D2D_DATABASE_URL, see .env.example)
-uv run d2d load              # optional: devices, change events and stories -> Postgres ontology.*
+docker run -d --name d2d-dev-pg -e POSTGRES_USER=d2d -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=d2d \
+  -p 127.0.0.1:55432:5432 postgres:16-alpine
+export D2D_DATABASE_URL=postgresql+psycopg://d2d:dev@127.0.0.1:55432/d2d
+uv run alembic upgrade head
+uv run d2d simulate && uv run d2d run && uv run d2d load      # stages 1-4 -> Postgres
+uv run d2d review export && uv run d2d train && uv run d2d classify   # stages 5-7
+uv run d2d serve                       # API + agent (+ built UI) on http://127.0.0.1:8000
+(cd web && npm ci && npm run dev)      # web UI with hot reload on http://127.0.0.1:5173
 ```
+
+Useful commands: `d2d eval changelog|linking|classifier` (gates), `d2d review queue|label|case`,
+`make check` (everything CI runs). Set `D2D_LLM=off` to run the agent without an LLM (grounded
+fallback answers only) or `D2D_LLM_MODEL=qwen3:8b` for faster answers.
 
 Create the GitHub milestones and issues from the backlog (idempotent, safe to re-run):
 

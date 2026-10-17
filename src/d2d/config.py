@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import tomllib
 from dataclasses import dataclass, field
@@ -139,3 +140,50 @@ def load_pipeline(path: Path) -> PipelineConfig:
         days=int(sim.get("days", 3)),
         start=parse_utc(str(sim.get("start", "2026-10-01T00:00:00Z"))),
     )
+
+
+@dataclass(frozen=True)
+class Category:
+    id: str
+    name: str
+    grid_analogue: str
+    definition: str
+    plain: str
+    energy: bool
+    checks: tuple[str, ...]
+    actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Taxonomy:
+    categories: dict[str, Category]
+    audit_rate: float
+    sha: str
+
+    def require(self, category_id: str) -> Category:
+        if category_id not in self.categories:
+            raise ConfigError(f"unknown category {category_id!r}")
+        return self.categories[category_id]
+
+
+def load_categories(path: Path) -> Taxonomy:
+    raw = load_toml(path)
+    categories: dict[str, Category] = {}
+    for c in raw.get("category", []):
+        if c["id"] in categories:
+            raise ConfigError(f"duplicate category id {c['id']!r}")
+        categories[c["id"]] = Category(
+            id=c["id"],
+            name=c["name"],
+            grid_analogue=c["grid_analogue"],
+            definition=c["definition"],
+            plain=c["plain"],
+            energy=bool(c.get("energy", False)),
+            checks=tuple(c.get("checks", ())),
+            actions=tuple(c.get("actions", ())),
+        )
+    audit_rate = float(raw.get("review", {}).get("audit_rate", 0.0))
+    if not 0.0 <= audit_rate <= 1.0:
+        raise ConfigError("review.audit_rate must be between 0 and 1")
+    sha = hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+    return Taxonomy(categories=categories, audit_rate=audit_rate, sha=sha)

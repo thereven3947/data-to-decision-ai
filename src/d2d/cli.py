@@ -2,20 +2,48 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
-from d2d.config import ConfigError, config_dir, load_household, load_pipeline, parse_utc
+from d2d.config import (
+    ConfigError,
+    config_dir,
+    load_categories,
+    load_household,
+    load_pipeline,
+    parse_utc,
+)
 from d2d.db import LoadError, load_run
 from d2d.db import database_url as default_url
 from d2d.evaluation import evaluate_changelog, evaluate_linking
-from d2d.ops import pipeline_plist
+from d2d.hitl.review import (
+    ReviewError,
+    create_case,
+    human_label,
+    open_queue,
+    simulate_reviews,
+)
+from d2d.hitl.sim_reviewer import label_stories
+from d2d.hitl.training_set import (
+    build_training_set,
+    read_training_set,
+    training_set_version,
+    write_training_set,
+)
+from d2d.ml.evaluate import evaluate_classifier
+from d2d.ml.infer import classify_new
+from d2d.ml.train import Classifier, TrainParams, load_meta, model_version
+from d2d.ml.train import save as save_model
+from d2d.ml.train import train as train_model
+from d2d.ops import api_plist, pipeline_plist
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
@@ -26,9 +54,32 @@ from d2d.simulator.cdc import cdc_ground_truth
 app = typer.Typer(no_args_is_help=True, help="Data to Decision with AI (D2D)")
 eval_app = typer.Typer(no_args_is_help=True, help="Deterministic evals against ground truth.")
 app.add_typer(eval_app, name="eval")
+review_app = typer.Typer(no_args_is_help=True, help="Stages 5-6: review queue, labels, cases.")
+app.add_typer(review_app, name="review")
 
 DataDir = Annotated[Path, typer.Option(help="Data directory (gitignored).")]
 ConfigDir = Annotated[Path | None, typer.Option(help="Config directory (default ./config).")]
+DatabaseUrl = Annotated[
+    str | None,
+    typer.Option(help="SQLAlchemy URL (default D2D_DATABASE_URL or the deploy .env keys)."),
+]
+
+
+def _engine(database_url: str | None) -> Engine:
+    try:
+        url = make_url(database_url) if database_url else default_url()
+    except ConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return create_engine(url)
+
+
+@contextmanager
+def _db_errors() -> Iterator[None]:
+    try:
+        yield
+    except (LoadError, ReviewError, ConfigError, SQLAlchemyError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
@@ -95,30 +146,171 @@ def run(data_dir: DataDir = Path("data"), config: ConfigDir = None) -> None:
 
 @app.command()
 def load(
-    data_dir: DataDir = Path("data"),
-    config: ConfigDir = None,
-    database_url: Annotated[
-        str | None,
-        typer.Option(help="SQLAlchemy URL (default D2D_DATABASE_URL or the deploy .env keys)."),
-    ] = None,
+    data_dir: DataDir = Path("data"), config: ConfigDir = None, database_url: DatabaseUrl = None
 ) -> None:
     """Load devices, change events and change stories from `d2d run` into Postgres."""
     household = load_household(config_dir(config) / "household.toml")
-    try:
-        url = make_url(database_url) if database_url else default_url()
-    except ConfigError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-    engine = create_engine(url)
-    try:
+    engine = _engine(database_url)
+    with _db_errors():
         s = load_run(engine, data_dir, household)
-    except (LoadError, SQLAlchemyError) as exc:
-        typer.echo(f"load failed: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-    finally:
-        engine.dispose()
+    engine.dispose()
     typer.echo(
         f"{s.devices} devices, {s.events} events, {s.stories} stories -> "
-        f"{url.render_as_string(hide_password=True)} ({s.stories_removed} stale stories removed)"
+        f"{engine.url.render_as_string(hide_password=True)} "
+        f"({s.stories_removed} stale stories removed)"
+    )
+
+
+@review_app.command("queue")
+def review_queue(database_url: DatabaseUrl = None) -> None:
+    """List open review items (abstained or audited stories)."""
+    engine = _engine(database_url)
+    with _db_errors(), engine.connect() as conn:
+        items = open_queue(conn)
+    for i in items:
+        suggestion = (
+            f"{i['suggested_category']} ({i['suggested_confidence']:.2f})"
+            if i["suggested_category"]
+            else "-"
+        )
+        typer.echo(
+            f"{i['story_id']}  {i['reason']:<8} {i['window_start']:%Y-%m-%d %H:%M}  "
+            f"{','.join(i['device_ids'])}  suggested={suggestion}"
+        )
+    typer.echo(f"{len(items)} open review items")
+
+
+@review_app.command("label")
+def review_label(
+    story_id: str,
+    category: str,
+    reviewer: Annotated[str, typer.Option(help="Who labeled the story.")] = "owner",
+    note: Annotated[str | None, typer.Option(help="Free-text reason.")] = None,
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Label a story (human label; resolves its review item and publishes it)."""
+    taxonomy = load_categories(config_dir(config) / "categories.toml")
+    engine = _engine(database_url)
+    with _db_errors():
+        label_id = human_label(engine, taxonomy, story_id, category, reviewer, note)
+    typer.echo(f"label {label_id}: {story_id} -> {category} by {reviewer}")
+
+
+@review_app.command("simulate")
+def review_simulate(
+    data_dir: DataDir = Path("data"), config: ConfigDir = None, database_url: DatabaseUrl = None
+) -> None:
+    """Resolve open review items with the simulated reviewer (ground truth; demo only)."""
+    taxonomy = load_categories(config_dir(config) / "categories.toml")
+    engine = _engine(database_url)
+    with _db_errors():
+        n = simulate_reviews(engine, label_stories(data_dir), taxonomy)
+    typer.echo(f"sim_reviewer labeled {n} stories")
+
+
+@review_app.command("export")
+def review_export(
+    data_dir: DataDir = Path("data"),
+    out: Annotated[
+        Path | None, typer.Option(help="Output dir (default <data-dir>/labels).")
+    ] = None,
+    ground_truth: Annotated[
+        bool, typer.Option(help="Add ground-truth labels for stories nobody reviewed.")
+    ] = True,
+    no_db: Annotated[bool, typer.Option("--no-db", help="Ground truth only, no Postgres.")] = False,
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Write the labeled training set (JSONL + manifest with a content-hash version)."""
+    household = load_household(config_dir(config) / "household.toml")
+    engine = None if no_db else _engine(database_url)
+    with _db_errors():
+        rows = build_training_set(data_dir, household, engine, ground_truth)
+    m = write_training_set(rows, out or data_dir / "labels")
+    by_source = ", ".join(f"{k}={v}" for k, v in m.by_source.items())
+    typer.echo(f"training set {m.version}: {m.examples} examples ({by_source})")
+
+
+@review_app.command("case")
+def review_case(
+    title: str,
+    story: Annotated[list[str] | None, typer.Option(help="Story id (repeatable).")] = None,
+    created_by: Annotated[str, typer.Option(help="Case owner.")] = "owner",
+    note: Annotated[str | None, typer.Option(help="Case note.")] = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Open a change-control case for one or more stories."""
+    engine = _engine(database_url)
+    with _db_errors():
+        case_id = create_case(engine, title, created_by, story or [], note)
+    typer.echo(f"case {case_id}: {title}")
+
+
+ModelsDir = Annotated[Path, typer.Option(help="Model directory (gitignored).")]
+
+
+@app.command()
+def train(
+    training_set: Annotated[
+        Path, typer.Option(help="training_set.jsonl from `d2d review export`.")
+    ] = Path("data/labels/training_set.jsonl"),
+    models_dir: ModelsDir = Path("models"),
+    force: Annotated[bool, typer.Option(help="Retrain even if the model is up to date.")] = False,
+) -> None:
+    """Stage 7: train the classifier and choose per-class abstain thresholds."""
+    rows = read_training_set(training_set)
+    version = training_set_version(rows)
+    current = load_meta(models_dir)
+    if not force and current and current.model_version == model_version(version, TrainParams()):
+        typer.echo(f"model {current.model_version} up to date (training set {version})")
+        return
+    model, meta = train_model(rows, version)
+    save_model(model, meta, models_dir)
+    typer.echo(
+        f"model {meta.model_version}: {meta.examples} examples "
+        f"({meta.augmented_examples} augmented), {len(meta.classes)} classes -> {models_dir}"
+    )
+
+
+@app.command()
+def classify(
+    models_dir: ModelsDir = Path("models"),
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Label new stories in Postgres; abstained and audit-sampled stories go to review."""
+    taxonomy = load_categories(config_dir(config) / "categories.toml")
+    classifier = Classifier(models_dir)
+    engine = _engine(database_url)
+    with _db_errors():
+        s = classify_new(engine, classifier, taxonomy)
+    typer.echo(
+        f"{s.classified} new stories: {s.published} published, {s.audit} audit, "
+        f"{s.abstained} abstained ({s.model_version})"
+    )
+
+
+@app.command()
+def serve(
+    host: Annotated[str, typer.Option(help="Bind address (keep 127.0.0.1).")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port.")] = 8000,
+    data_dir: DataDir = Path("data"),
+    reload: Annotated[bool, typer.Option(help="Auto-reload on code changes (dev).")] = False,
+) -> None:
+    """Run the API, agent and web UI (http://127.0.0.1:8000)."""
+    import os
+
+    import uvicorn
+
+    os.environ.setdefault("D2D_DATA_DIR", str(data_dir.resolve()))
+    uvicorn.run(
+        "d2d.api.main:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+        proxy_headers=False,
     )
 
 
@@ -126,12 +318,20 @@ def load(
 def launchd_plist(
     env: Annotated[str, typer.Option(help="Environment: staging or production.")],
     env_dir: Annotated[Path, typer.Option(help="Environment root, e.g. ~/d2d/production.")],
+    service: Annotated[str, typer.Option(help="pipeline (scheduled) or api (always on).")] = (
+        "pipeline"
+    ),
     config: ConfigDir = None,
 ) -> None:
-    """Print the launchd agent that runs the pipeline every cadence_minutes (pipeline.toml)."""
+    """Print a launchd agent: the scheduled pipeline (cadence_minutes) or the API server."""
     pipeline = load_pipeline(config_dir(config) / "pipeline.toml")
     try:
-        xml = pipeline_plist(env, env_dir, pipeline.cadence_minutes)
+        if service == "api":
+            xml = api_plist(env, env_dir)
+        elif service == "pipeline":
+            xml = pipeline_plist(env, env_dir, pipeline.cadence_minutes)
+        else:
+            raise ValueError(f"unknown service {service!r}, expected pipeline or api")
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(xml.decode("utf-8"), nl=False)
@@ -148,6 +348,29 @@ def eval_linking(
     for name, value in r.items():
         typer.echo(f"{name:<15}{value:.3f}")
     ok = r["pair_f1"] >= min_f1 and r["pair_precision"] >= min_precision
+    typer.echo("gate: PASS" if ok else "gate: FAIL")
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+@eval_app.command("classifier")
+def eval_classifier(
+    models_dir: ModelsDir = Path("models"),
+    golden: Annotated[Path, typer.Option(help="Frozen golden stories.")] = Path(
+        "evals/golden/stories.jsonl"
+    ),
+    min_precision: Annotated[float, typer.Option(help="Gate: per-class precision.")] = 0.9,
+    min_coverage: Annotated[float, typer.Option(help="Gate: 1 - abstain rate.")] = 0.7,
+) -> None:
+    """Score the classifier on the golden set; exit 1 if a gate fails."""
+    r = evaluate_classifier(Classifier(models_dir), read_training_set(golden))
+    typer.echo(f"coverage      {r.coverage:.3f}  ({r.covered}/{r.examples})")
+    typer.echo(f"min precision {r.min_precision:.3f}")
+    for c, p in r.precision_by_class.items():
+        typer.echo(f"  {c:<24}{p:.3f}")
+    for sid, want, got in r.errors[:10]:
+        typer.echo(f"  wrong {sid}: {want} -> {got}")
+    ok = r.min_precision >= min_precision and r.coverage >= min_coverage
     typer.echo("gate: PASS" if ok else "gate: FAIL")
     if not ok:
         raise typer.Exit(code=1)

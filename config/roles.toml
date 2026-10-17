@@ -1,0 +1,23 @@
+# Roles and permissions (stage 10). See docs/domain-model.md#roles-and-permissions-stage-10.
+# There is no login yet: the web UI sends the selected role in the X-D2D-Role header, and the API
+# only listens on 127.0.0.1 (remote access later through Cloudflare Access, M4-04).
+
+[owner]
+description = "Sees everything; reviews, labels and manages cases."
+can_label = true
+
+[family]
+description = "All devices except those tagged private; chat and feedback."
+hidden_device_tags = ["private"]
+
+[energy_advisor]
+description = "Energy and load categories only, no room names; chat and feedback."
+energy_only = true
+hide_rooms = true
+hidden_device_tags = ["private"]
+
+[guest]
+description = "Published stories for shared rooms only; chat."
+published_only = true
+shared_rooms = ["living", "kitchen", "front_door", "front_yard"]
+hidden_device_tags = ["private"]

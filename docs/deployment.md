@@ -14,7 +14,8 @@ the click replaces the environment reviewer; both environments only accept deplo
 | Deploy script | [deploy/deploy.sh](../deploy/deploy.sh) | Build release → smoke test → switch → compose up → migrate → pipeline run → launchd agent, rollback on failure |
 | Services | [deploy/docker-compose.yml](../deploy/docker-compose.yml) | Postgres 16 per environment (compose project `d2d-<env>`, localhost only) |
 | Schema | [migrations/alembic](../migrations/alembic) via [alembic.ini](../alembic.ini) | `ontology.device`, `change_event`, `change_story`, `change_story_event` (M4-02) |
-| Schedule | launchd agent `com.d2d.pipeline.<env>` from `d2d launchd-plist` | Runs [deploy/pipeline.sh](../deploy/pipeline.sh) (`simulate` → `run` → `load`) every `cadence_minutes` (`config/pipeline.toml`, 15 min) |
+| Schedule | launchd agent `com.d2d.pipeline.<env>` from `d2d launchd-plist` | Runs [deploy/pipeline.sh](../deploy/pipeline.sh) (`simulate` → `run` → `load` → `review export` → `train` (only if labels changed) → `classify`) every `cadence_minutes` (`config/pipeline.toml`, 15 min) |
+| API + web UI | launchd agent `com.d2d.api.<env>` (`--service api`, KeepAlive) | [deploy/api.sh](../deploy/api.sh) runs `d2d serve` on `127.0.0.1:8080` (production) / `8081` (staging), serving `/api`, the Copilot and the built web UI; it uses native Ollama at `127.0.0.1:11434` |
 
 ## Layout per environment
 
@@ -23,18 +24,21 @@ the click replaces the environment reviewer; both environments only accept deplo
 ├── .env                      POSTGRES_PASSWORD, D2D_SECRET_KEY, D2D_PG_PORT (prod 5432, staging 5433); chmod 600
 ├── releases/<ts>-<sha>/      git archive of the commit + .venv (last 3 kept)
 ├── current -> releases/...   active release
-├── data/                     pipeline output (simulate + run)
-└── logs/pipeline.log         scheduled runs
+├── data/                     pipeline output (simulate + run, labels/)
+├── models/                   classifier.joblib + classifier.json (retrained when labels change)
+└── logs/                     pipeline.log (scheduled runs), api.log (API server)
 ```
 
 ## Deploy steps and rollback
 
-1. `git archive` the commit into a new release, `uv sync --locked --no-dev`.
-2. Smoke test: `d2d simulate` → `d2d run` → both eval gates on a temp dir. A failure stops here; the
-   running release is untouched.
+1. `git archive` the commit into a new release, `uv sync --locked --no-dev`, and build the web UI
+   (`npm ci && npm run build` in `web/`, Node from `~/.local/bin`).
+2. Smoke test: `d2d simulate` → `d2d run` → changelog and linking gates → train on ground truth →
+   classifier gate, all on a temp dir. A failure stops here; the running release is untouched.
 3. Point `current` at the new release, `docker compose up -d --wait`, `alembic upgrade head` (URL from
    the environment `.env`: `POSTGRES_PASSWORD`, `D2D_PG_PORT`), one pipeline run against
-   `~/d2d/<env>/data` that also loads Postgres (`d2d load`), reinstall the launchd agent.
+   `~/d2d/<env>/data` that also loads Postgres and labels stories, reinstall both launchd agents, and
+   wait until `/api/health` answers with this release's revision.
 4. If step 3 fails, `current` is pointed back at the previous release and step 3 is repeated for it;
    the job still fails so the run is red in GitHub. Migrations are not rolled back: every migration
    must keep the previous release working (add columns/tables, do not drop or rename in one step).
@@ -67,8 +71,14 @@ docker compose -p d2d-production exec postgres psql -U d2d -d d2d \
   -c "select status, count(*) from ontology.change_story group by 1"   # loaded stories
 (cd ~/d2d/production/current && set -a && . ~/d2d/production/.env && .venv/bin/alembic current)  # schema version
 ~/actions-runner/svc.sh status                            # runner
+open http://127.0.0.1:8080                                # production web UI (staging: 8081)
+tail -f ~/d2d/production/logs/api.log                     # API / agent log
+launchctl kickstart -k gui/$(id -u)/com.d2d.api.production   # restart the API
 ```
 
-The runner, Ollama and the pipeline agents are launchd **user** agents: they start when you log in.
+Optional `.env` keys: `D2D_API_PORT` (default 8080 production, 8081 staging), `D2D_LLM_MODEL`
+(default `qwen3:14b` from `config/llm.toml`), `D2D_LLM=off` (grounded fallback answers, no LLM).
+
+The runner, Ollama, the API and the pipeline agents are launchd **user** agents: they start when you log in.
 For unattended restarts after a power failure, enable System Settings → Users & Groups →
 **Automatically log in as** (requires FileVault off), or log in once after each restart.

@@ -1,0 +1,4 @@
+intent = "Timeline of one device"
+priority = 30
+patterns = ['history', 'going on with', 'timeline', 'happened (to|with) the']
+prefetch = [{ tool = "list_devices", args = {} }]

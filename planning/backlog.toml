@@ -222,35 +222,45 @@ id = "M6-01"
 milestone = "M6"
 title = "Review queue, cases and labeled training set"
 size = "L"
+status = "done"
 depends_on = ["M3-01", "M4-02"]
+acceptance = ["Abstained and audit-sampled stories are queued in hitl.review_item", "Labels are append-only with source, reviewer and model_version", "d2d review export writes a content-versioned training set"]
 
 [[issue]]
 id = "M7-01"
 milestone = "M7"
 title = "Calibrated precision-first classifier with abstain"
 size = "L"
+status = "done"
 depends_on = ["M6-01"]
+acceptance = ["Per-class thresholds reach precision >= 0.9 on out-of-fold predictions", "Below-threshold predictions abstain to review", "d2d eval classifier gate in CI"]
 
 [[issue]]
 id = "M8-01"
 milestone = "M8"
 title = "Enrichment templates, impact calculators, ontology tables"
 size = "L"
+status = "done"
 depends_on = ["M7-01"]
+acceptance = ["Every category has a template; impact numbers are computed, not templated", "Exact-number tests for load shift and circuit load"]
 
 [[issue]]
 id = "M9-01"
 milestone = "M9"
 title = "Ontology API with permissions + Change Control UI"
 size = "L"
+status = "done"
 depends_on = ["M8-01"]
+acceptance = ["Each role sees only its scope (tests)", "Web UI: overview, stories, changelog, events, devices, review, Copilot"]
 
 [[issue]]
 id = "M10-01"
 milestone = "M10"
 title = "Copilot agent: provider, tools, skills, grounding checker, llm-eval workflow"
 size = "L"
+status = "done"
 depends_on = ["M9-01"]
+acceptance = ["Read-only tools under the caller scope", "Grounding checker rejects unknown ids, hidden devices, relabels and unknown numbers", "Answer records stored with skill sha and model tag"]
 
 [[issue]]
 id = "M11-01"

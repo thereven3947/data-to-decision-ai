@@ -1,0 +1,4 @@
+intent = "Summarize recent activity for the household"
+priority = 5
+patterns = ['\bbrief', 'summary', 'summari[sz]e', 'overview', 'today', 'this week', 'what.*(going on|new)\b', 'recap']
+prefetch = [{ tool = "get_kpis", args = {} }, { tool = "list_stories", args = { limit = 12 } }]
