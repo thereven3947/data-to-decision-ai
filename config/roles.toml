@@ -1,6 +1,6 @@
 # Roles and permissions (stage 10). See docs/domain-model.md#roles-and-permissions-stage-10.
-# There is no login yet: the web UI sends the selected role in the X-D2D-Role header, and the API
-# only listens on 127.0.0.1 (remote access later through Cloudflare Access, M4-04).
+# Each login account has one role (`d2d user add <name> --role <role>`). Owners may preview the
+# other roles in the UI (X-D2D-Role header); everyone else always gets their own role.
 
 [owner]
 description = "Sees everything; reviews, labels and manages cases."

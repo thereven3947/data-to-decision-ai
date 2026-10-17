@@ -11,3 +11,6 @@ build/
 data/
 models/
 .DS_Store
+# login accounts (password hashes) - never commit
+users.toml
+*.users.toml

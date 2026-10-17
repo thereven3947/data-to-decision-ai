@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import getpass
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +15,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
+from d2d.api.scope import ROLES
+from d2d.auth import MIN_PASSWORD, AuthError, UsersFile, users_file_for
 from d2d.config import (
     ConfigError,
     config_dir,
@@ -56,6 +60,11 @@ eval_app = typer.Typer(no_args_is_help=True, help="Deterministic evals against g
 app.add_typer(eval_app, name="eval")
 review_app = typer.Typer(no_args_is_help=True, help="Stages 5-6: review queue, labels, cases.")
 app.add_typer(review_app, name="review")
+user_app = typer.Typer(
+    no_args_is_help=True,
+    help="Web app accounts. Stores only password hashes, in a users file outside git.",
+)
+app.add_typer(user_app, name="user")
 
 DataDir = Annotated[Path, typer.Option(help="Data directory (gitignored).")]
 ConfigDir = Annotated[Path | None, typer.Option(help="Config directory (default ./config).")]
@@ -312,6 +321,91 @@ def serve(
         reload=reload,
         proxy_headers=False,
     )
+
+
+EnvOpt = Annotated[
+    str | None, typer.Option("--env", help="staging or production (~/d2d/<env>/users.toml).")
+]
+UsersFileOpt = Annotated[
+    Path | None, typer.Option(help="Users file (default: --env, else $D2D_USERS_FILE).")
+]
+
+
+def _users(env: str | None, users_file: Path | None) -> UsersFile:
+    try:
+        return UsersFile(users_file_for(env, users_file))
+    except ConfigError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _read_password(password_stdin: bool) -> str:
+    if password_stdin:
+        return sys.stdin.readline().rstrip("\n")
+    first = getpass.getpass(f"Password (min {MIN_PASSWORD} characters, not shown): ")
+    if getpass.getpass("Repeat password: ") != first:
+        typer.echo("passwords do not match", err=True)
+        raise typer.Exit(code=1)
+    return first
+
+
+def _save_user(
+    username: str, role: str, env: str | None, users_file: Path | None, password_stdin: bool
+) -> None:
+    users = _users(env, users_file)
+    try:
+        users.set_user(username, role, _read_password(password_stdin), ROLES)
+    except AuthError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"saved {username} ({role}) -> {users.path} (password hash only, mode 600)")
+
+
+@user_app.command("add")
+def user_add(
+    username: str,
+    role: Annotated[str, typer.Option(help="owner, family, energy_advisor or guest.")] = "guest",
+    env: EnvOpt = None,
+    users_file: UsersFileOpt = None,
+    password_stdin: Annotated[bool, typer.Option(help="Read the password from stdin.")] = False,
+) -> None:
+    """Create (or replace) an account; prompts for the password without echoing it."""
+    _save_user(username, role, env, users_file, password_stdin)
+
+
+@user_app.command("passwd")
+def user_passwd(
+    username: str,
+    env: EnvOpt = None,
+    users_file: UsersFileOpt = None,
+    password_stdin: Annotated[bool, typer.Option(help="Read the password from stdin.")] = False,
+) -> None:
+    """Change a password (signs that user out everywhere)."""
+    existing = _users(env, users_file).get(username)
+    if existing is None:
+        typer.echo(f"error: no user {username!r}", err=True)
+        raise typer.Exit(code=1)
+    _save_user(username, existing.role, env, users_file, password_stdin)
+
+
+@user_app.command("remove")
+def user_remove(username: str, env: EnvOpt = None, users_file: UsersFileOpt = None) -> None:
+    """Delete an account (signs it out everywhere)."""
+    users = _users(env, users_file)
+    try:
+        users.remove(username)
+    except AuthError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"removed {username} from {users.path}")
+
+
+@user_app.command("list")
+def user_list(env: EnvOpt = None, users_file: UsersFileOpt = None) -> None:
+    """List accounts and roles (never prints hashes)."""
+    users = _users(env, users_file)
+    for u in sorted(users.users().values(), key=lambda u: u.username):
+        typer.echo(f"{u.username:<20}{u.role:<16}created {u.created}")
+    typer.echo(f"{len(users.users())} users in {users.path}")
 
 
 @app.command("launchd-plist")

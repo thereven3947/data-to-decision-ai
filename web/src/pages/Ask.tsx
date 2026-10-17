@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
-import { api, getRole, post, type ChatAnswer, type Health } from '../api'
+import { api, post, type ChatAnswer, type Health, type Meta } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
 import { linkCitations } from '../format'
 
@@ -20,6 +20,7 @@ const SESSION_KEY = 'd2d.chat.session'
 
 export default function Ask() {
   const health = useQuery({ queryKey: ['health'], queryFn: () => api<Health>('/health') })
+  const meta = useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/meta') })
   const [turns, setTurns] = useState<Turn[]>([])
   const [question, setQuestion] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(sessionStorage.getItem(SESSION_KEY))
@@ -73,7 +74,7 @@ export default function Ask() {
       <div className="chat">
         {turns.length === 0 && (
           <div className="suggestions">
-            <p className="muted">Try one of these, as role <strong>{getRole()}</strong>:</p>
+            <p className="muted">Try one of these, as role <strong>{meta.data?.role ?? '…'}</strong>:</p>
             {SUGGESTIONS.map((s) => (
               <button type="button" key={s} className="suggestion" onClick={() => submit(s)}>{s}</button>
             ))}

@@ -253,6 +253,87 @@ def test_chat_falls_back_when_llm_is_down_or_ungrounded(engine: Engine, run_data
 def test_health_and_meta(engine: Engine, run_data: Path) -> None:
     client = _client(engine, run_data)
     health = _get(client, "/health")
-    assert health["schema"] == "0003" and health["llm"] is None
+    assert health["schema"] == "0004" and health["llm"] is None
     meta = _get(client, "/meta", "energy_advisor")
     assert meta["can_label"] is False and all(c["energy"] for c in meta["categories"])
+
+
+def _auth_client(engine: Engine, run_data: Path, tmp_path: Path) -> tuple[TestClient, Any]:
+    from d2d.auth import auth_from_env
+
+    auth = auth_from_env({"D2D_SECRET_KEY": "s" * 40, "D2D_USERS_FILE": str(tmp_path / "u.toml")})
+    assert auth is not None
+    from d2d.api.scope import ROLES
+
+    auth.users.set_user("alice", "owner", "alice-password-123", ROLES)
+    auth.users.set_user("gail", "guest", "gail-password-123", ROLES)
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth)
+    return TestClient(create_app(ctx, web_dist=Path("/nonexistent"))), auth
+
+
+def test_login_required_and_roles_come_from_the_account(
+    engine: Engine, run_data: Path, tmp_path: Path
+) -> None:
+    client, auth = _auth_client(engine, run_data, tmp_path)
+    status = client.get("/api/auth/status").json()
+    assert status == {"auth_enabled": True, "users_configured": True, "user": None}
+    assert client.get("/api/health").status_code == 200  # deploy health check stays public
+    for path in ("/api/stories", "/api/meta", "/api/events", "/api/kpis"):
+        assert client.get(path).status_code == 401, path
+    assert client.post("/api/chat", json={"question": "hi"}).status_code == 401
+
+    bad = client.post("/api/auth/login", json={"username": "alice", "password": "nope"})
+    assert bad.status_code == 401
+    ok = client.post("/api/auth/login", json={"username": "gail", "password": "gail-password-123"})
+    assert ok.status_code == 200 and ok.json()["role"] == "guest"
+    cookie = ok.headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=strict" in cookie
+    # A guest cannot escalate with the preview header.
+    assert _get(client, "/meta", "owner")["role"] == "guest"
+    guest_ids = {s["story_id"] for s in _get(client, "/stories", "owner")}
+    assert (
+        client.post(
+            "/api/stories/x/label", json={"category": "load_shift"}, headers={"X-D2D-Role": "owner"}
+        ).status_code
+        == 403
+    )
+    client.post("/api/auth/logout")
+    assert client.get("/api/stories").status_code == 401
+
+    client.post("/api/auth/login", json={"username": "alice", "password": "alice-password-123"})
+    assert _get(client, "/meta")["username"] == "alice"
+    owner_ids = {s["story_id"] for s in _get(client, "/stories")}
+    assert guest_ids < owner_ids
+    assert {s["story_id"] for s in _get(client, "/stories", "guest")} == guest_ids  # owner preview
+
+    fb = client.post(
+        "/api/feedback",
+        json={"target_type": "page", "target_id": "/", "rating": "comment", "comment": "nice"},
+    )
+    assert fb.status_code == 200
+    with engine.connect() as conn:
+        assert (
+            conn.execute(
+                select(feedback.c.username).where(feedback.c.comment == "nice")
+            ).scalar_one()
+            == "alice"
+        )
+
+    # Changing the password ends existing sessions.
+    from d2d.api.scope import ROLES
+
+    auth.users.set_user("alice", "owner", "alice-password-456", ROLES)
+    assert client.get("/api/stories").status_code == 401
+
+
+def test_login_is_rate_limited(engine: Engine, run_data: Path, tmp_path: Path) -> None:
+    client, _ = _auth_client(engine, run_data, tmp_path)
+    codes = [
+        client.post("/api/auth/login", json={"username": "alice", "password": "wrong"}).status_code
+        for _ in range(6)
+    ]
+    assert codes[:5] == [401] * 5 and codes[5] == 429
+    right = client.post(
+        "/api/auth/login", json={"username": "alice", "password": "alice-password-123"}
+    )
+    assert right.status_code == 429  # still locked out for this window

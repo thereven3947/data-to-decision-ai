@@ -171,6 +171,25 @@ export function setRole(role: Role) {
   localStorage.setItem(ROLE_KEY, role)
 }
 
+export interface SessionUser {
+  username: string
+  role: Role
+}
+
+export interface AuthStatus {
+  auth_enabled: boolean
+  users_configured: boolean
+  user: SessionUser | null
+}
+
+// Role preview header: only sent when the signed-in user may switch roles (owner, or login off).
+let previewRole: Role | null = null
+export function setPreviewRole(role: Role | null) {
+  previewRole = role
+}
+
+export const UNAUTHORIZED_EVENT = 'd2d:unauthorized'
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -182,8 +201,15 @@ export class ApiError extends Error {
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', 'X-D2D-Role': getRole(), ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(previewRole ? { 'X-D2D-Role': previewRole } : {}),
+      ...init?.headers,
+    },
   })
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+  }
   if (!res.ok) {
     let detail = res.statusText
     try {

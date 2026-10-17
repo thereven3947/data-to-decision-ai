@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
-import { api, ROLES, type Health, type Meta, type Role } from './api'
+import { api, ROLES, type Health, type Meta, type Role, type SessionUser } from './api'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { FeedbackWidget } from './components/Feedback'
 import { humanize } from './format'
@@ -25,7 +25,15 @@ const NAV = [
   ['/ask', 'Ask the Copilot'],
 ] as const
 
-export default function App({ role, onRoleChange }: { role: Role; onRoleChange: (r: Role) => void }) {
+interface Props {
+  role: Role
+  onRoleChange: (r: Role) => void
+  canSwitch: boolean
+  user: SessionUser | null
+  onLogout: () => void
+}
+
+export default function App({ role, onRoleChange, canSwitch, user, onLogout }: Props) {
   const location = useLocation()
   const meta = useQuery({ queryKey: ['meta', role], queryFn: () => api<Meta>('/meta') })
   const health = useQuery({ queryKey: ['health'], queryFn: () => api<Health>('/health'), refetchInterval: 60_000 })
@@ -50,14 +58,27 @@ export default function App({ role, onRoleChange }: { role: Role; onRoleChange: 
           ))}
         </nav>
         <div className="role-picker">
-          <label htmlFor="role">Viewing as</label>
-          <select id="role" value={role} onChange={(e) => onRoleChange(e.target.value as Role)}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {humanize(r)}
-              </option>
-            ))}
-          </select>
+          {user && (
+            <div className="signed-in">
+              <span>
+                Signed in as <strong>{user.username}</strong>
+                <small>{humanize(user.role)}</small>
+              </span>
+              <button type="button" className="link" onClick={onLogout}>Sign out</button>
+            </div>
+          )}
+          {canSwitch ? (
+            <>
+              <label htmlFor="role">{user ? 'View as' : 'Viewing as'}</label>
+              <select id="role" value={role} onChange={(e) => onRoleChange(e.target.value as Role)}>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {humanize(r)}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
           <small>{meta.data?.roles.find((r) => r.name === role)?.description}</small>
         </div>
         <div className="status-line" data-testid="health">

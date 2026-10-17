@@ -1,7 +1,9 @@
 """Capture README screenshots and the GitHub social preview from a running app.
 
 Usage (app running, e.g. `uv run d2d serve`; uses the installed Google Chrome):
-    uv run --with playwright python scripts/screenshots.py --url http://127.0.0.1:8081
+    read -s D2D_SCREENSHOT_PASSWORD && export D2D_SCREENSHOT_PASSWORD   # not shown, not in history
+    D2D_SCREENSHOT_USER=<owner account> \
+      uv run --with playwright python scripts/screenshots.py --url http://127.0.0.1:8081
 
 Writes docs/images/*.png. The Copilot shot asks a real question, so the LLM must be reachable.
 """
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import os
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
@@ -78,6 +81,14 @@ def main() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome")
         page = browser.new_page(viewport=VIEWPORT, device_scale_factor=1)
+        user = os.environ.get("D2D_SCREENSHOT_USER")
+        if user:  # log in through the API; the session cookie is shared with the page
+            resp = page.request.post(
+                args.url + "/api/auth/login",
+                data={"username": user, "password": os.environ.get("D2D_SCREENSHOT_PASSWORD", "")},
+            )
+            if not resp.ok:
+                raise SystemExit(f"login failed: {resp.status} {resp.text()}")
         page.goto(args.url + "/")
         page.evaluate("localStorage.setItem('d2d.role', 'owner')")
         for name, path, selector in PAGES:

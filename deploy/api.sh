@@ -14,6 +14,10 @@ case "$ENV_NAME" in
   *) DEFAULT_PORT=8081 ;;
 esac
 export D2D_DATA_DIR="$ENV_DIR/data"
+# Login: password hashes live in $ENV_DIR/users.toml (outside git, `d2d user add`); sessions are
+# signed with D2D_SECRET_KEY from .env. Login cannot be turned off for deployed environments.
+export D2D_USERS_FILE="$ENV_DIR/users.toml"
+export D2D_AUTH=on
 export D2D_WEB_DIST="$ENV_DIR/current/web/dist"
 echo "== $(date -u +%FT%TZ) api $ENV_NAME $(cat REVISION 2>/dev/null || echo unknown) port ${D2D_API_PORT:-$DEFAULT_PORT}"
 exec .venv/bin/d2d serve --host 127.0.0.1 --port "${D2D_API_PORT:-$DEFAULT_PORT}" --data-dir "$ENV_DIR/data"

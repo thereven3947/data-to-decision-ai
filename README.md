@@ -112,12 +112,16 @@ export D2D_DATABASE_URL=postgresql+psycopg://d2d:dev@127.0.0.1:55432/d2d
 uv run alembic upgrade head
 uv run d2d simulate && uv run d2d run && uv run d2d load      # stages 1-4 -> Postgres
 uv run d2d review export && uv run d2d train && uv run d2d classify   # stages 5-7
+printf 'D2D_SECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> .env   # once (.env is gitignored)
+uv run d2d user add me --role owner --users-file users.toml       # prompts; users.toml is gitignored
+set -a; . ./.env; set +a; export D2D_USERS_FILE=$PWD/users.toml
 uv run d2d serve                       # API + agent (+ built UI) on http://127.0.0.1:8000
 (cd web && npm ci && npm run dev)      # web UI with hot reload on http://127.0.0.1:5173
 ```
 
 Useful commands: `d2d eval changelog|linking|classifier` (gates), `d2d review queue|label|case`,
-`make check` (everything CI runs). Set `D2D_LLM=off` to run the agent without an LLM (grounded
+`make check` (everything CI runs). Set `D2D_AUTH=off` to skip login during local
+development (never on the Mac mini), `D2D_LLM=off` to run the agent without an LLM (grounded
 fallback answers only) or `D2D_LLM_MODEL=qwen3:8b` for faster answers.
 
 Create the GitHub milestones and issues from the backlog (idempotent, safe to re-run):

@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -20,6 +20,7 @@ from d2d.agent.runtime import Agent
 from d2d.agent.skills import load_skills
 from d2d.api.repo import Ontology
 from d2d.api.scope import ROLES, RolePolicy, Scope, load_roles
+from d2d.auth import COOKIE, AuthConfig, auth_from_env, fingerprint, verify_password
 from d2d.config import config_dir, load_categories, load_household
 from d2d.db import FEEDBACK_REASONS, chat_message, database_url, feedback
 from d2d.enrichment import load_enrichment
@@ -34,6 +35,7 @@ class AppContext:
     roles: dict[str, RolePolicy]
     agent: Agent
     provider: Provider | None
+    auth: AuthConfig | None = None
 
 
 def build_context(
@@ -42,6 +44,7 @@ def build_context(
     data_dir: Path,
     skills_dir: Path,
     provider: Provider | None,
+    auth: AuthConfig | None = None,
 ) -> AppContext:
     household = load_household(cfg_dir / "household.toml")
     taxonomy = load_categories(cfg_dir / "categories.toml")
@@ -49,7 +52,7 @@ def build_context(
     onto = Ontology(engine, household, taxonomy, enrichment, data_dir)
     max_calls = load_llm(cfg_dir / "llm.toml").max_tool_calls
     agent = Agent(onto, provider, load_skills(skills_dir), max_calls)
-    return AppContext(onto, load_roles(cfg_dir / "roles.toml"), agent, provider)
+    return AppContext(onto, load_roles(cfg_dir / "roles.toml"), agent, provider, auth)
 
 
 def default_context() -> AppContext:
@@ -62,6 +65,7 @@ def default_context() -> AppContext:
         Path(os.environ.get("D2D_DATA_DIR") or ROOT / "data"),
         Path(os.environ.get("D2D_SKILLS_DIR") or ROOT / "agent" / "skills"),
         provider,
+        auth_from_env(),
     )
 
 
@@ -79,6 +83,11 @@ class CaseIn(BaseModel):
 class ChatIn(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     session_id: str | None = None
+
+
+class LoginIn(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class FeedbackIn(BaseModel):
@@ -100,13 +109,52 @@ def get_ctx(request: Request) -> AppContext:
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
-def get_scope(c: Ctx, x_d2d_role: Annotated[str, Header()] = "owner") -> Scope:
-    if x_d2d_role not in c.roles:
+def session_user(c: AppContext, request: Request) -> tuple[str, str] | None:
+    """(username, role) of a valid session cookie, or None."""
+    if c.auth is None:
+        return None
+    token = request.cookies.get(COOKIE)
+    claims = c.auth.signer.verify(token) if token else None
+    if claims is None:
+        return None
+    user = c.auth.users.get(claims[0])
+    if user is None or fingerprint(user.password) != claims[1] or user.role not in c.roles:
+        return None
+    return user.username, user.role
+
+
+def get_scope(
+    c: Ctx, request: Request, x_d2d_role: Annotated[str | None, Header()] = None
+) -> Scope:
+    """Role of the logged-in user. Only owners may preview another role with X-D2D-Role.
+
+    With login turned off (D2D_AUTH=off, local development) the header alone picks the role.
+    """
+    if x_d2d_role is not None and x_d2d_role not in c.roles:
         raise HTTPException(400, f"unknown role {x_d2d_role!r}; expected one of {ROLES}")
-    return Scope(c.roles[x_d2d_role], c.onto.household, c.onto.taxonomy)
+    if c.auth is None:
+        role = x_d2d_role or "owner"
+        return Scope(c.roles[role], c.onto.household, c.onto.taxonomy, username=None)
+    found = session_user(c, request)
+    if found is None:
+        raise HTTPException(401, "login required")
+    username, role = found
+    if role == "owner" and x_d2d_role:
+        role = x_d2d_role
+    return Scope(c.roles[role], c.onto.household, c.onto.taxonomy, username=username)
 
 
 S = Annotated[Scope, Depends(get_scope)]
+
+
+_DUMMY_HASH = "scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+
+def _owned_by(s: Scope) -> Any:
+    """Chat history belongs to the logged-in user (or to the role when login is off)."""
+    if s.username is not None:
+        return chat_message.c.username == s.username
+    return chat_message.c.user_role == s.role
 
 
 def require_owner(s: Scope) -> None:
@@ -115,7 +163,15 @@ def require_owner(s: Scope) -> None:
 
 
 def create_app(context: AppContext | None = None, web_dist: Path | None = None) -> FastAPI:
-    app = FastAPI(title="Change Control Beta API", version=__version__)
+    # Interactive API docs only on request (D2D_API_DOCS=on); the public demo does not need them.
+    docs = os.environ.get("D2D_API_DOCS") == "on"
+    app = FastAPI(
+        title="Change Control Beta API",
+        version=__version__,
+        docs_url="/api/docs" if docs else None,
+        redoc_url=None,
+        openapi_url="/api/openapi.json" if docs else None,
+    )
     app.state.ctx = context
 
     @app.get("/api/health")
@@ -134,11 +190,55 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
             "llm_available": available,
         }
 
+    def secure_cookie(request: Request) -> bool:
+        return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+    @app.get("/api/auth/status")
+    def auth_status(c: Ctx, request: Request) -> dict[str, Any]:
+        found = session_user(c, request)
+        return {
+            "auth_enabled": c.auth is not None,
+            "users_configured": bool(c.auth and c.auth.users.users()),
+            "user": {"username": found[0], "role": found[1]} if found else None,
+        }
+
+    @app.post("/api/auth/login")
+    def login(c: Ctx, request: Request, response: Response, body: LoginIn) -> dict[str, Any]:
+        if c.auth is None:
+            raise HTTPException(400, "login is turned off (D2D_AUTH=off)")
+        client = request.client.host if request.client else "unknown"
+        keys = (f"user:{body.username.lower()}", f"ip:{client}")
+        if c.auth.limiter.blocked(*keys):
+            raise HTTPException(429, "too many failed logins; try again in 15 minutes")
+        user = c.auth.users.get(body.username.lower())
+        # Verify against a dummy hash for unknown users so timing does not reveal valid names.
+        encoded = user.password if user else _DUMMY_HASH
+        if not verify_password(body.password, encoded) or user is None:
+            c.auth.limiter.fail(*keys)
+            raise HTTPException(401, "wrong username or password")
+        c.auth.limiter.reset(*keys)
+        response.set_cookie(
+            COOKIE,
+            c.auth.signer.issue(user.username, fingerprint(user.password)),
+            max_age=c.auth.signer.ttl,
+            httponly=True,
+            samesite="strict",
+            secure=secure_cookie(request),
+            path="/",
+        )
+        return {"username": user.username, "role": user.role}
+
+    @app.post("/api/auth/logout")
+    def logout(response: Response) -> dict[str, bool]:
+        response.delete_cookie(COOKIE, path="/")
+        return {"ok": True}
+
     @app.get("/api/meta")
     def meta(c: Ctx, s: S) -> dict[str, Any]:
         return {
             "home": {"id": c.onto.household.id, "timezone": c.onto.household.timezone},
             "role": s.role,
+            "username": s.username,
             "can_label": s.policy.can_label,
             "roles": [{"name": r.name, "description": r.description} for r in c.roles.values()],
             "categories": [
@@ -174,7 +274,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
             raise HTTPException(404, "story not found")
         try:
             label_id = human_label(
-                c.onto.engine, c.onto.taxonomy, story_id, body.category, s.role, body.note
+                c.onto.engine, c.onto.taxonomy, story_id, body.category, s.actor, body.note
             )
         except (ReviewError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -219,7 +319,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
     def new_case(c: Ctx, s: S, body: CaseIn) -> dict[str, Any]:
         require_owner(s)
         try:
-            case_id = create_case(c.onto.engine, body.title, s.role, body.story_ids, body.note)
+            case_id = create_case(c.onto.engine, body.title, s.actor, body.story_ids, body.note)
         except ReviewError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"case_id": case_id}
@@ -237,6 +337,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
                 for r in conn.execute(
                     select(chat_message.c.question, chat_message.c.answer)
                     .where(chat_message.c.session_id == session_id)
+                    .where(_owned_by(s))
                     .order_by(chat_message.c.message_id)
                 )
             ]
@@ -247,6 +348,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
                 insert(chat_message)
                 .values(
                     session_id=session_id,
+                    username=s.username,
                     user_role=s.role,
                     question=body.question,
                     answer=rec.answer,
@@ -272,7 +374,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
                 for r in conn.execute(
                     select(chat_message)
                     .where(chat_message.c.session_id == session_id)
-                    .where(chat_message.c.user_role == s.role)
+                    .where(_owned_by(s))
                     .order_by(chat_message.c.message_id)
                 ).mappings()
             ]
@@ -284,7 +386,7 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
         with c.onto.engine.begin() as conn:
             fid = conn.execute(
                 insert(feedback)
-                .values(**body.model_dump(), user_role=s.role)
+                .values(**body.model_dump(), user_role=s.role, username=s.username)
                 .returning(feedback.c.feedback_id)
             ).scalar_one()
         return {"feedback_id": fid}

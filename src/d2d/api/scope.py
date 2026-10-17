@@ -45,9 +45,16 @@ def load_roles(path: Path) -> dict[str, RolePolicy]:
 
 
 class Scope:
-    def __init__(self, policy: RolePolicy, household: Household, taxonomy: Taxonomy) -> None:
+    def __init__(
+        self,
+        policy: RolePolicy,
+        household: Household,
+        taxonomy: Taxonomy,
+        username: str | None = None,
+    ) -> None:
         self.policy = policy
         self.role = policy.name
+        self.username = username
         self._taxonomy = taxonomy
         hidden = set(policy.hidden_device_tags)
         self.devices = {
@@ -56,6 +63,11 @@ class Scope:
             if not hidden & set(d.tags)
             and (policy.shared_rooms is None or d.room in policy.shared_rooms)
         }
+
+    @property
+    def actor(self) -> str:
+        """Who did it, for labels and cases: the username, or the role when login is off."""
+        return self.username or self.role
 
     @property
     def event_level(self) -> bool:

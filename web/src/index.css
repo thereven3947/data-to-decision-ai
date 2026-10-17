@@ -174,3 +174,15 @@ a.citation { background: var(--accent-soft); padding: 0 6px; border-radius: 6px;
 .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .page-head button, .button { white-space: nowrap; }
+.center-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: radial-gradient(circle at 30% 20%, #1f2a4a, #141b2d 60%); }
+.card.login { width: 380px; display: flex; flex-direction: column; gap: 0.9rem; padding: 1.75rem; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.card.login h1 { font-size: 1.3rem; margin: 0.25rem 0 0; }
+.card.login label { display: flex; flex-direction: column; gap: 0.3rem; font-weight: 600; font-size: 0.85rem; }
+.card.login input { padding: 0.6rem 0.7rem; }
+.card.login button[type='submit'] { padding: 0.6rem; }
+.brand.dark strong { color: var(--ink); }
+.brand.dark small { color: var(--muted); }
+.signed-in { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: #e8ecf5; margin-bottom: 0.6rem; font-size: 0.85rem; }
+.signed-in small { display: block; color: #8c97b0; }
+button.link { background: none; border: 1px solid #39435e; color: #cfd6e6; padding: 0.2rem 0.55rem; font-size: 0.78rem; }
+button.link:hover { border-color: #cfd6e6; }
