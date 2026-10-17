@@ -54,6 +54,26 @@ local Copilot that answers questions about them. Screenshots from the Mac mini s
 A **Viewing as** switch shows what each role (owner, family, energy advisor, guest) may see, and 👍/👎
 plus a 💬 Feedback button on every page collect UX feedback in Postgres.
 
+## Security (private beta)
+
+The demo runs on a personal Mac mini, so it is locked down by default. Full details are in
+[deployment.md](docs/deployment.md#accounts-and-login).
+
+| Layer | Protection |
+|-------|------------|
+| Network | The web app, API, Postgres and Ollama only listen on `127.0.0.1`; nothing is published to the internet or the LAN. Requests addressed to any other hostname are rejected (blocks DNS rebinding). |
+| Accounts | One **owner** account only (`config/roles.toml` `[accounts]`). `d2d user add` refuses more, and the API refuses every login if the users file is edited to break that rule. |
+| Passwords | Never stored. `d2d user add` prompts without echo and keeps only a salted **scrypt** hash in `~/d2d/<env>/users.toml` (mode 600, outside the repo, git-ignored). |
+| Sessions | HttpOnly, SameSite=Strict cookie signed with `D2D_SECRET_KEY` (in `~/d2d/<env>/.env`, mode 600). Changing the password or removing the user ends sessions immediately. 5 failed logins lock sign-in for 15 minutes. |
+| API | Every `/api` route needs a session except `health` (only `ok` + revision) and sign-in. The server decides the role; the browser cannot raise it. Labels and cases are owner-only. API docs are off. |
+| Copilot | Read-only tools under the caller's role; no writes, shell or file access. Answers pass a grounding check. Unauthenticated chat requests are rejected before the model runs. |
+| Browser | `Content-Security-Policy`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`; no CORS; no source maps or secrets in the bundle. |
+| Repo | `.env`, `users.toml`, data and models are git-ignored; history checked for secrets before going public. Self-hosted runner jobs only run for pushes to `main` and manual deploys. |
+
+Verified on the live staging deploy from a browser console with no account: chat, data and history
+requests return 401 in a few milliseconds without reaching the model, forged cookies and role
+headers are rejected, password guessing is locked out on the 6th try, and other hostnames get 400.
+
 ## Pipeline at a glance
 
 | # | Stage | Toy implementation |

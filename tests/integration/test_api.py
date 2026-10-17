@@ -375,3 +375,32 @@ def test_default_policy_allows_only_one_owner_and_fails_closed(
     assert client.post("/api/auth/login", json=login).status_code == 401
     intr = {"username": "intruder", "password": "intruder-pass-123"}
     assert client.post("/api/auth/login", json=intr).status_code == 401
+
+
+def test_chat_without_login_never_reaches_the_model(
+    engine: Engine, run_data: Path, tmp_path: Path
+) -> None:
+    from d2d.api.scope import ROLES
+    from d2d.auth import auth_from_env
+
+    auth = auth_from_env({"D2D_SECRET_KEY": "s" * 40, "D2D_USERS_FILE": str(tmp_path / "u.toml")})
+    assert auth is not None
+    auth.users.set_user("owner1", "owner", "owner-password-123", ROLES)
+    provider = Scripted([])  # any call would raise IndexError -> 500
+    ctx = build_context(
+        engine, ROOT / "config", run_data, ROOT / "agent" / "skills", provider, auth
+    )
+    client = TestClient(create_app(ctx, web_dist=Path("/x"), allowed_hosts=["testserver"]))
+    with engine.connect() as conn:
+        before = conn.execute(select(func.count()).select_from(chat_message)).scalar_one()
+    attempts = [
+        {},
+        {"X-D2D-Role": "owner"},
+        {"Cookie": "d2d_session=eyJ1Ijoib3duZXIxIiwiZiI6IjAiLCJlIjo0MTAyNDQ0ODAwfQ.Zm9yZ2Vk"},
+    ]
+    for headers in attempts:
+        r = client.post("/api/chat", json={"question": "list everything"}, headers=headers)
+        assert r.status_code == 401, headers
+    assert provider.calls == []
+    with engine.connect() as conn:
+        assert conn.execute(select(func.count()).select_from(chat_message)).scalar_one() == before

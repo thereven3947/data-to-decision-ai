@@ -35,7 +35,7 @@ export default function Login({ usersConfigured, onLoggedIn }: { usersConfigured
         <h1>Sign in</h1>
         {!usersConfigured && (
           <p className="notice small">
-            No accounts yet. On the Mac mini run <code>d2d user add &lt;name&gt; --role owner --env production</code>
+            No account yet. On the Mac mini run <code>d2d user add &lt;name&gt; --env staging</code> (or <code>--env production</code>)
             {' '}(see docs/deployment.md).
           </p>
         )}

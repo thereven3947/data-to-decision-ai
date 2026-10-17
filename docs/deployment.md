@@ -106,7 +106,8 @@ DENY` and `nosniff` headers. Before login, `/api/health` returns only `ok` and t
 Interactive API docs are off unless `D2D_API_DOCS=on`
 (then at `/api/docs`, still behind nothing but your own machine). Behind a tunnel all clients reach
 the API from one address, so a burst of failed logins can briefly lock the login for everyone; that
-is the trade-off for a simple beta login.
+is the trade-off for a simple beta login. Locked out? Wait 15 minutes, or restart the API:
+`launchctl kickstart -k gui/$(id -u)/com.d2d.api.<env>` (the counter lives in memory).
 
 Optional `.env` keys: `D2D_API_PORT` (default 8080 production, 8081 staging), `D2D_LLM_MODEL`
 (default `qwen3:14b` from `config/llm.toml`), `D2D_LLM=off` (grounded fallback answers, no LLM).
