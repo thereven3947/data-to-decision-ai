@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
-import { api, IS_DEMO, LIVE_URL, post, type ChatAnswer, type Health, type Meta } from '../api'
+import { api, ApiError, IS_DEMO, LIVE_URL, post, type ChatAnswer, type Health, type Meta } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
 import { linkCitations } from '../format'
 
@@ -33,7 +33,11 @@ export default function Ask() {
       sessionStorage.setItem(SESSION_KEY, a.session_id)
       setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, answer: a } : x)))
     },
-    onError: (e) => setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, error: String(e) } : x))),
+    onError: (e) => {
+      const limited = e instanceof ApiError && e.status === 429
+      const error = limited ? `⏳ ${e.message}` : `Error: ${e instanceof Error ? e.message : String(e)}`
+      setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, error } : x)))
+    },
   })
 
   useEffect(() => {
@@ -94,7 +98,7 @@ export default function Ask() {
           <div key={i} className="turn">
             <div className="bubble user">{t.question}</div>
             {t.answer && <Answer a={t.answer} />}
-            {t.error && <div className="bubble assistant error">Error: {t.error}</div>}
+            {t.error && <div className={`bubble assistant ${t.error.startsWith('⏳') ? 'limited' : 'error'}`}>{t.error}</div>}
             {!t.answer && !t.error && (
               <div className="bubble assistant thinking" aria-live="polite">
                 <span className="spinner" /> Thinking with the local model… (usually 15–40 s)

@@ -18,7 +18,7 @@ from d2d.config import load_toml
 
 @dataclass(frozen=True)
 class ChatLimits:
-    per_user_per_hour: int = 30
+    per_user_per_hour: int = 3
     max_concurrent: int = 1
     max_waiting: int = 2
     owner_exempt: bool = True
@@ -27,7 +27,7 @@ class ChatLimits:
 def load_limits(path: Path) -> ChatLimits:
     raw = load_toml(path).get("limits", {})
     return ChatLimits(
-        per_user_per_hour=int(raw.get("per_user_per_hour", 30)),
+        per_user_per_hour=int(raw.get("per_user_per_hour", 3)),
         max_concurrent=max(1, int(raw.get("max_concurrent", 1))),
         max_waiting=max(0, int(raw.get("max_waiting", 2))),
         owner_exempt=bool(raw.get("owner_exempt", True)),

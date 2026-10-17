@@ -196,3 +196,4 @@ button.link:hover { border-color: #cfd6e6; }
 .live-cta { display: flex; flex-direction: column; gap: 0.35rem; }
 .live-cta .button { text-align: center; font-weight: 600; }
 .live-cta small { color: #8c97b0; }
+.bubble.assistant.limited { background: #fff8e6; border-color: #f6d58b; }

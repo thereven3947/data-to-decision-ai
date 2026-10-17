@@ -213,7 +213,7 @@ def test_chat_guard_quota_and_busy() -> None:
 
     from d2d.api.guard import ChatGuard, ChatLimits, GuardRefused, load_limits
 
-    assert load_limits(ROOT / "config" / "llm.toml") == ChatLimits(30, 1, 2, True)
+    assert load_limits(ROOT / "config" / "llm.toml") == ChatLimits(3, 1, 2, True)
     g = ChatGuard(ChatLimits(per_user_per_hour=2, max_concurrent=1, max_waiting=0))
     g.check_quota("user:g", exempt=False, now=0)
     g.check_quota("user:g", exempt=False, now=10)

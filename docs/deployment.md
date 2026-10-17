@@ -145,6 +145,8 @@ workflow runs again.
 4. Set the repository variable `D2D_LIVE_URL=https://<mac>.<tailnet>.ts.net` and re-run the
    `pages` workflow (Actions → pages → Run workflow). The button appears on the public demo.
 5. Invite testers: `d2d user add <name> --role guest --env production` (see the local runbook).
+   Each guest may ask the Copilot 3 questions per rolling hour (`config/llm.toml` `[limits]`); the
+   app shows how long to wait when the limit is reached.
 
 ### What is exposed and how it is protected
 
@@ -152,7 +154,7 @@ With Funnel on, the sign-in page of the live app is on the public internet. Prot
 invite-only accounts (no sign-up, `config/roles.toml` `[accounts]`), scrypt-hashed passwords,
 5 failed logins per account or visitor address lock sign-in for 15 minutes, every `/api` route
 except health and sign-in needs a session, HTTPS with `Secure` cookies and HSTS, strict security
-headers, and the **Copilot guard** in `config/llm.toml` (`[limits]`: 30 questions per account per
+headers, and the **Copilot guard** in `config/llm.toml` (`[limits]`: 3 questions per account per
 hour, one answer at a time, at most two waiting; the owner is exempt from the quota). Guests only
 see published stories for shared rooms and cannot label, open cases or see Insights.
 
