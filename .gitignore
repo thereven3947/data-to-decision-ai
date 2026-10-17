@@ -14,3 +14,5 @@ models/
 # login accounts (password hashes) - never commit
 users.toml
 *.users.toml
+# local-only operations notes (login runbook)
+docs/local/

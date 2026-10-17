@@ -14,7 +14,7 @@ Milestones follow the pipeline stages. Each one ends with something demoable; is
 | **M6 · HITL review** | 5–6 | Review queue, cases, labeled training set with provenance, simulated reviewer | Stories labeled through the UI/CLI and versioned | ✅ done: `hitl.label` (append-only, provenance), `hitl.review_item` (abstain + 20 % audit sample), cases, `d2d review` CLI + review UI, simulated reviewer from ground truth, versioned training set (`d2d review export`) |
 | **M7 · ML classifier** | 7 | Features, calibrated classifier, per-class thresholds, abstain | Precision ≥ 0.90 per class on golden set | ✅ done: calibrated LogisticRegression on story features, per-class thresholds from out-of-fold precision, abstain → review, `d2d train` / `classify` / `eval classifier` (golden set, gate precision ≥ 0.90, coverage ≥ 0.70) |
 | **M8 · Enrichment & ontology** | 8–9 | Templated descriptions, impact calculators, ontology tables | 100 % numeric correctness on golden stories | ✅ done: Jinja2 templates per category (`config/enrichment.toml`), impact calculators (kWh / $ shifted, circuit load %, RSSI gain, error episodes) with exact-number tests; computed on read, `enrichment_template_sha` in lineage |
-| **M9 · Ontology API & UI** | 10 | FastAPI read API, permissions, Change Control web UI | Each role sees only its scope (tests) | ✅ done: FastAPI (`d2d serve`), login (scrypt hashes outside git, signed session cookies) with one role per account from `config/roles.toml`; owners can preview other roles, web UI (Vite + React): overview, stories, changelog, events, devices, review, Copilot, feedback |
+| **M9 · Ontology API & UI** | 10 | FastAPI read API, permissions, Change Control web UI | Each role sees only its scope (tests) | ✅ done: FastAPI (`d2d serve`), login with one role per account (single owner in the beta); owners can preview other roles, web UI (Vite + React): overview, stories, changelog, events, devices, review, Copilot, feedback |
 | **M10 · Copilot agent** | 11 | Ollama provider, read-only tools, skills, router, grounding checker | Grounding ≥ 0.98 on golden conversations | ✅ done (no `llm-eval` workflow yet): Ollama `qwen3:14b`, 6 read-only tools, 6 coded skills + router, grounding checker with one retry and a templated fallback, answers stored in `feedback.chat_message` |
 | **M11 · Feedback, calibration & KPIs** | 12 | Feedback capture/routing, nightly calibration PRs, KPI dashboard | One full loop: feedback → calibration PR → merged → better metric | in progress: 👍/👎 + reason on stories and answers and per-page comments stored in `feedback.feedback`; KPIs on the overview. Next: routing, nightly calibration PRs, KPI dashboard |
 
@@ -53,8 +53,8 @@ at most one push per story, with updates folded into the same notification.
 
 ## Toy simplifications (by design, revisit before real use)
 
-- **Simple login:** accounts live in a local users file managed with `d2d user` (no sign-up, no
-  password reset by email, no 2FA). Put Cloudflare Access in front before exposing the app (M4-04).
+- **Simple login:** no sign-up, password reset by email or 2FA in the beta. Put Cloudflare Access in
+  front before exposing the app beyond the Mac mini (M4-04).
 - **Enrichment is computed on read** from events + templates (deterministic, versioned by
   `enrichment_template_sha`) instead of being stored in an ontology table.
 - **Golden set = default scenarios:** `evals/golden/stories.jsonl` is frozen from the default
