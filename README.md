@@ -68,7 +68,7 @@ The demo runs on a personal Mac mini, so it is locked down by default. Full deta
 | API | Every `/api` route needs a session except `health` (only `ok` + revision) and sign-in. The server decides the role; the browser cannot raise it. Labels and cases are owner-only. API docs are off. |
 | Copilot | Read-only tools under the caller's role; no writes, shell or file access. Answers pass a grounding check. Unauthenticated chat requests are rejected before the model runs. |
 | Browser | `Content-Security-Policy`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`; no CORS; no source maps or secrets in the bundle. |
-| Repo | `.env`, `users.toml`, data and models are git-ignored; history checked for secrets before going public. Self-hosted runner jobs only run for pushes to `main` and manual deploys. |
+| Repo | `.env`, `users.toml`, data and models are git-ignored; history checked for secrets; secret scanning and push protection on. The deploy workflow only runs on the Mac mini for pushes to `main` and manual runs; workflows from forked pull requests need the owner's approval (**never approve one that changes `.github/`**, it could run code on the self-hosted runner). |
 
 Verified on the live staging deploy from a browser console with no account: chat, data and history
 requests return 401 in a few milliseconds without reaching the model, forged cookies and role
