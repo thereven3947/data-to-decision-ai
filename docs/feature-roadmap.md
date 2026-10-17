@@ -61,3 +61,6 @@ at most one push per story, with updates folded into the same notification.
   simulator run (`scripts/freeze_golden.py`), so the classifier gate is a regression check, not a
   generalization estimate. Human labels from the UI grow the real training set.
 - **Simulator replays the same 3 days** every 15 minutes, so story ids stay stable and reviews persist.
+- **Grounding covers ids, categories and numbers with units** (kWh, W, $, %, dB). Plain counts and
+  times in a Copilot answer are not checked yet, so the model can still misstate them; 👎 feedback
+  with reason `wrong_data` is how these get collected.

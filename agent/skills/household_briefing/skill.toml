@@ -1,4 +1,5 @@
 intent = "Summarize recent activity for the household"
 priority = 5
-patterns = ['\bbrief', 'summary', 'summari[sz]e', 'overview', 'today', 'this week', 'what.*(going on|new)\b', 'recap']
+# "going on with <device>" is device_history; only device-less questions are briefings.
+patterns = ['\bbrief', 'summary', 'summari[sz]e', 'overview', 'today', 'this week', "^what('s| is| has)? ?(been )?(going on|new)( lately| recently)?\\??$", 'recap']
 prefetch = [{ tool = "get_kpis", args = {} }, { tool = "list_stories", args = { limit = 12 } }]

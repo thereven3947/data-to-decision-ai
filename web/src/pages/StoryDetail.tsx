@@ -131,7 +131,11 @@ function ReviewPanel({ story }: { story: Detail }) {
       <h3>{open ? `Review needed (${story.review!.reason})` : 'Label'}</h3>
       {story.review?.suggested_category && open && (
         <p className="small">
-          Model suggests <strong>{humanize(story.review.suggested_category)}</strong> at {pct(story.review.suggested_confidence)}.
+          Model suggests{' '}
+          <strong>
+            {meta.data.categories.find((c) => c.id === story.review!.suggested_category)?.name ??
+              humanize(story.review.suggested_category)}
+          </strong> at {pct(story.review.suggested_confidence)}.
         </p>
       )}
       <div className="row gap wrap">

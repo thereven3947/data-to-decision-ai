@@ -20,6 +20,8 @@ A, B = "aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"
         ("Why did the dishwasher run at 2 a.m.?", "why_question"),
         ("What should I do about the washer?", "action_items"),
         ("Show me the history of the dryer", "device_history"),
+        ("What's been going on with the garage door?", "device_history"),
+        ("What's new?", "household_briefing"),
         ("hello there", "general"),
     ],
 )

@@ -9,6 +9,7 @@ type Item = Story & { review: ReviewInfo }
 export default function Review() {
   const meta = useQuery({ queryKey: ['meta', getRole()], queryFn: () => api<Meta>('/meta') })
   const queue = useQuery({ queryKey: ['review'], queryFn: () => api<Item[]>('/review') })
+  const names = Object.fromEntries(meta.data?.categories.map((c) => [c.id, c.name]) ?? [])
   return (
     <section>
       <header className="page-head">
@@ -34,10 +35,10 @@ export default function Review() {
               <tr key={s.story_id}>
                 <td><Link to={`/stories/${s.story_id}`}>{s.title}</Link></td>
                 <td><span className={`badge badge-${s.review.reason}`}>{s.review.reason}</span></td>
-                <td>{s.review.suggested_category ? `${humanize(s.review.suggested_category)} (${pct(s.review.suggested_confidence)})` : '—'}</td>
+                <td>{s.review.suggested_category ? `${names[s.review.suggested_category] ?? humanize(s.review.suggested_category)} (${pct(s.review.suggested_confidence)})` : '—'}</td>
                 <td className="nowrap">{formatTs(s.window_start)}</td>
                 <td>{s.devices.map((d) => d.name).join(', ')}</td>
-                <td><Link to={`/stories/${s.story_id}`} className="button">Review →</Link></td>
+                <td><Link to={`/stories/${s.story_id}`} className="button nowrap">Review →</Link></td>
               </tr>
             ))}
           </tbody>
