@@ -1,5 +1,7 @@
 # Data to Decision with AI (D2D)
 
+![Change Control Beta: raw device changes become labeled stories and plain-language answers](docs/images/social-preview.png)
+
 A small-scale, closed-loop **change intelligence** system: it turns raw configuration and operational
 changes into labeled **change stories**, explains them in plain language through an embedded AI
 agent, and uses human feedback to calibrate every layer — pipeline, ML, enrichment and agent skills.
@@ -21,6 +23,36 @@ charge of what matters:
 - ML does the **labeling** — precision-first, abstaining to human review when unsure.
 - The LLM **never labels**. It reads labels, enriched descriptions and coded skills, and converts them
   into plain-language answers, briefings and *proposed* action items.
+
+## Change Control Beta (demo)
+
+The web app turns the simulated home's raw changes into reviewed, explained **change stories**, with a
+local Copilot that answers questions about them. Screenshots from the Mac mini staging deploy
+(regenerate with `uv run --with playwright python scripts/screenshots.py`):
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/images/overview.png"><img src="docs/images/overview.png" alt="Overview"></a><br>
+      <b>Overview</b> — stories, auto-label coverage, review backlog and every device at a glance.</td>
+    <td width="50%"><a href="docs/images/story.png"><img src="docs/images/story.png" alt="Change story"></a><br>
+      <b>Change story</b> — linked events, plain-language summary with computed impact, playbook, review and lineage.</td>
+  </tr>
+  <tr>
+    <td><a href="docs/images/copilot.png"><img src="docs/images/copilot.png" alt="Ask the Copilot"></a><br>
+      <b>Ask the Copilot</b> — local <code>qwen3:14b</code> via Ollama; every answer is grounding-checked and cites its stories.</td>
+    <td><a href="docs/images/review.png"><img src="docs/images/review.png" alt="Review queue"></a><br>
+      <b>Review queue</b> — abstained and audit-sampled stories; your label becomes training data.</td>
+  </tr>
+  <tr>
+    <td><a href="docs/images/changelog.png"><img src="docs/images/changelog.png" alt="Semantic changelog"></a><br>
+      <b>Semantic changelog</b> — typed snapshot diff with meaning from <code>semantics.toml</code>.</td>
+    <td><a href="docs/images/events.png"><img src="docs/images/events.png" alt="Change events"></a><br>
+      <b>Change events</b> — one idempotent event per meaningful change, linked to its story.</td>
+  </tr>
+</table>
+
+A **Viewing as** switch shows what each role (owner, family, energy advisor, guest) may see, and 👍/👎
+plus a 💬 Feedback button on every page collect UX feedback in Postgres.
 
 ## Pipeline at a glance
 

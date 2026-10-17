@@ -15,7 +15,8 @@ export default function Devices() {
       {devices.isLoading && <Loading />}
       {devices.isError && <ErrorBox error={devices.error} />}
       {devices.data && (
-        <table>
+        <div className="table-wrap">
+          <table>
           <thead>
             <tr><th>Device</th><th>Kind</th>{devices.data.some((d) => d.room) && <th>Room</th>}<th>State</th><th>Power</th><th>Firmware</th><th>Circuit</th><th>Network</th><th>Events</th><th>Stories</th><th>As of</th></tr>
           </thead>
@@ -37,6 +38,7 @@ export default function Devices() {
             ))}
           </tbody>
         </table>
+          </div>
       )}
     </section>
   )

@@ -35,7 +35,8 @@ export default function Events() {
       {events.isError && <ErrorBox error={events.error} />}
       {rows?.length === 0 && <Empty>No events.</Empty>}
       {rows && rows.length > 0 && (
-        <table>
+        <div className="table-wrap">
+          <table>
           <thead>
             <tr><th>When</th><th>Device</th><th>Property</th><th>Change</th><th>Kind</th><th>Tag</th><th>Story</th></tr>
           </thead>
@@ -53,6 +54,7 @@ export default function Events() {
             ))}
           </tbody>
         </table>
+          </div>
       )}
     </section>
   )

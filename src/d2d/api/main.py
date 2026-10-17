@@ -115,7 +115,7 @@ def require_owner(s: Scope) -> None:
 
 
 def create_app(context: AppContext | None = None, web_dist: Path | None = None) -> FastAPI:
-    app = FastAPI(title="D2D Change Control API", version=__version__)
+    app = FastAPI(title="Change Control Beta API", version=__version__)
     app.state.ctx = context
 
     @app.get("/api/health")

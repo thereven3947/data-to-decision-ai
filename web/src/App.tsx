@@ -36,8 +36,10 @@ export default function App({ role, onRoleChange }: { role: Role; onRoleChange: 
         <div className="brand">
           <span className="logo">D2D</span>
           <div>
-            <strong>Change Control</strong>
-            <small>{meta.data?.home.id ?? 'simulated home'}</small>
+            <strong>
+              Change Control <span className="beta">Beta</span>
+            </strong>
+            <small>Demo · {meta.data?.home.id ?? 'simulated home'}</small>
           </div>
         </div>
         <nav>

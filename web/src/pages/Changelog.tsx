@@ -30,7 +30,8 @@ export default function Changelog() {
       {log.isError && <ErrorBox error={log.error} />}
       {rows?.length === 0 && <Empty>No changelog rows (run the pipeline first).</Empty>}
       {rows && rows.length > 0 && (
-        <table>
+        <div className="table-wrap">
+          <table>
           <thead>
             <tr><th>Before</th><th>After</th><th>Device</th><th>Property</th><th>Change</th><th>Kind</th><th>Semantic tag</th><th>Run</th></tr>
           </thead>
@@ -49,6 +50,7 @@ export default function Changelog() {
             ))}
           </tbody>
         </table>
+          </div>
       )}
     </section>
   )

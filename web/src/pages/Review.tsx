@@ -26,7 +26,8 @@ export default function Review() {
       {queue.isError && <ErrorBox error={queue.error} />}
       {queue.data?.length === 0 && <Empty>Nothing to review. 🎉</Empty>}
       {queue.data && queue.data.length > 0 && (
-        <table>
+        <div className="table-wrap">
+          <table>
           <thead>
             <tr><th>Story</th><th>Reason</th><th>Suggested</th><th>When</th><th>Devices</th><th /></tr>
           </thead>
@@ -43,6 +44,7 @@ export default function Review() {
             ))}
           </tbody>
         </table>
+          </div>
       )}
     </section>
   )

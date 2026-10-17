@@ -32,6 +32,7 @@ export default function StoryDetail() {
       <div className="grid-2">
         <div>
           <h2>Change events ({s.events.length})</h2>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr><th>When</th><th>Device</th><th>Property</th><th>Change</th><th>Meaning</th></tr>
@@ -48,6 +49,7 @@ export default function StoryDetail() {
               ))}
             </tbody>
           </table>
+          </div>
           <Facts facts={s.enrichment.facts} />
         </div>
         <div>
