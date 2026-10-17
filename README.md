@@ -56,23 +56,27 @@ plus a 💬 Feedback button on every page collect UX feedback in Postgres.
 
 ## Security (private beta)
 
-The demo runs on a personal Mac mini, so it is locked down by default. Full details are in
-[deployment.md](docs/deployment.md#accounts-and-login).
+The demo runs on a personal machine, so it is private by default. The principles:
 
-| Layer | Protection |
-|-------|------------|
-| Network | The web app, API, Postgres and Ollama only listen on `127.0.0.1`; nothing is published to the internet or the LAN. Requests addressed to any other hostname are rejected (blocks DNS rebinding). |
-| Accounts | One **owner** account only (`config/roles.toml` `[accounts]`). `d2d user add` refuses more, and the API refuses every login if the users file is edited to break that rule. |
-| Passwords | Never stored. `d2d user add` prompts without echo and keeps only a salted **scrypt** hash in `~/d2d/<env>/users.toml` (mode 600, outside the repo, git-ignored). |
-| Sessions | HttpOnly, SameSite=Strict cookie signed with `D2D_SECRET_KEY` (in `~/d2d/<env>/.env`, mode 600). Changing the password or removing the user ends sessions immediately. 5 failed logins lock sign-in for 15 minutes. |
-| API | Every `/api` route needs a session except `health` (only `ok` + revision) and sign-in. The server decides the role; the browser cannot raise it. Labels and cases are owner-only. API docs are off. |
-| Copilot | Read-only tools under the caller's role; no writes, shell or file access. Answers pass a grounding check. Unauthenticated chat requests are rejected before the model runs. |
-| Browser | `Content-Security-Policy`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`; no CORS; no source maps or secrets in the bundle. |
-| Repo | `.env`, `users.toml`, data and models are git-ignored; history checked for secrets; secret scanning and push protection on. The deploy workflow only runs on the Mac mini for pushes to `main` and manual runs; workflows from forked pull requests need the owner's approval (**never approve one that changes `.github/`**, it could run code on the self-hosted runner). |
+- **Local only.** Every service listens only on the machine it runs on; nothing is published to the
+  internet or the local network, and requests addressed to other hostnames are refused.
+- **Owner by invitation.** There is no sign-up. Accounts can only be created by someone already at
+  the machine, and the beta allows a single owner account.
+- **No stored passwords.** Only salted one-way hashes are kept, outside the repository.
+- **Every request is checked on the server.** All data, review and Copilot endpoints require a valid
+  session, and the server (not the browser) decides what each account may see and do.
+- **A read-only Copilot.** The local LLM can only read data the signed-in user may see; it cannot
+  change labels, run commands or open files, and its answers are checked against the data.
+  Requests without a session are refused before the model runs.
+- **Hardened browser surface.** Strict security headers, no cross-site access, and no secrets or
+  source maps in the web bundle.
+- **Secrets stay out of git.** Keys, accounts, data and models are git-ignored; secret scanning and
+  push protection are on.
+- **Clones are independent.** Anyone who clones the repo runs their own copy with their own accounts,
+  data and model; it cannot reach the original machine, and forks cannot use its deploy runner.
 
-Verified on the live staging deploy from a browser console with no account: chat, data and history
-requests return 401 in a few milliseconds without reaching the model, forged cookies and role
-headers are rejected, password guessing is locked out on the 6th try, and other hostnames get 400.
+These controls are tested in CI and were verified against the live deploy. Found a security issue?
+Please open a private report through the repository's **Security** tab instead of a public issue.
 
 ## Pipeline at a glance
 
