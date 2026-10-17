@@ -2,6 +2,13 @@
 # Each login account has one role (`d2d user add <name> --role <role>`). Owners may preview the
 # other roles in the UI (X-D2D-Role header); everyone else always gets their own role.
 
+[accounts]
+# Who may have a login. Default: exactly one owner account. `d2d user add` refuses anything else,
+# and the API refuses every login if the users file breaks this rule (fails closed).
+# To invite people later: raise max_users and add their roles here, e.g. roles = ["owner", "guest"].
+max_users = 1
+roles = ["owner"]
+
 [owner]
 description = "Sees everything; reviews, labels and manages cases."
 can_label = true

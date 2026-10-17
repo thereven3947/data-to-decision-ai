@@ -85,16 +85,25 @@ the passwords; sessions are signed with `D2D_SECRET_KEY` from the environment's 
 ```bash
 cd ~/d2d/production/current
 .venv/bin/d2d user add <name> --role owner --env production    # prompts twice, input hidden
-.venv/bin/d2d user add <friend> --role guest --env production  # invite others with a lower role
+# more accounts are blocked by default (see policy below)
 .venv/bin/d2d user list --env production
 .venv/bin/d2d user passwd <name> --env production              # also signs that user out
-.venv/bin/d2d user remove <friend> --env production
+.venv/bin/d2d user remove <name> --env production
 ```
+
+**Default policy: one owner account only.** `config/roles.toml` `[accounts]` sets `max_users = 1`
+and `roles = ["owner"]`, so `d2d user add` refuses a second account or any other role, and the API
+refuses every login if the users file breaks the policy (for example, a hand-edited extra user).
+To invite people later, raise `max_users`, add their roles, commit and deploy.
 
 Changes apply immediately (no restart). Passwords need 12+ characters; 5 failed logins per user or
 client lock that key for 15 minutes. Roles: `owner` (everything, can preview other roles), `family`,
 `energy_advisor`, `guest` (see `config/roles.toml`). `/api/health` and the static UI are public;
-every other `/api` route needs a session. Interactive API docs are off unless `D2D_API_DOCS=on`
+every other `/api` route needs a session. The API only answers requests addressed to
+`127.0.0.1` or `localhost` (`D2D_ALLOWED_HOSTS`, add the tunnel hostname when M4-04 lands), which
+blocks DNS-rebinding from other websites, and sends `Content-Security-Policy`, `X-Frame-Options:
+DENY` and `nosniff` headers. Before login, `/api/health` returns only `ok` and the revision.
+Interactive API docs are off unless `D2D_API_DOCS=on`
 (then at `/api/docs`, still behind nothing but your own machine). Behind a tunnel all clients reach
 the API from one address, so a burst of failed logins can briefly lock the login for everyone; that
 is the trade-off for a simple beta login.

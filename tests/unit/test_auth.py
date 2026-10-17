@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from d2d.api.scope import ROLES
+from d2d.api.scope import ROLES, AccountPolicy, load_account_policy
 from d2d.auth import (
     AuthError,
     LoginLimiter,
@@ -23,6 +23,7 @@ from d2d.cli import app
 from d2d.config import ConfigError
 
 PW = "correct horse battery"
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_hash_and_verify() -> None:
@@ -102,28 +103,69 @@ def test_auth_from_env(tmp_path: Path) -> None:
     assert cfg is not None and cfg.signer.ttl == 7200 and cfg.users.path == tmp_path / "u.toml"
 
 
-def test_user_cli(tmp_path: Path) -> None:
+def test_user_cli_blocks_extra_accounts_by_default(tmp_path: Path) -> None:
     runner = CliRunner()
     f = str(tmp_path / "users.toml")
-    r = runner.invoke(
-        app,
-        ["user", "add", "alice", "--role", "owner", "--users-file", f, "--password-stdin"],
-        input=PW + "\n",
-    )
-    assert r.exit_code == 0, r.output
-    r = runner.invoke(
-        app, ["user", "add", "bob", "--users-file", f, "--password-stdin"], input="short\n"
-    )
-    assert r.exit_code == 1 and "at least 12" in r.output
-    listed = runner.invoke(app, ["user", "list", "--users-file", f]).output
-    assert "alice" in listed and "owner" in listed and "scrypt" not in listed
+    cfg = ["--config", str(ROOT / "config")]
+    add = ["user", "add", "--users-file", f, "--password-stdin", *cfg]
+    assert runner.invoke(app, [*add[:2], "me", *add[2:]], input=PW + "\n").exit_code == 0
+    second = runner.invoke(app, [*add[:2], "friend", *add[2:]], input=PW + "\n")
+    assert second.exit_code == 1 and "user limit reached" in second.output
+    guest = runner.invoke(app, [*add[:2], "me", "--role", "guest", *add[2:]], input=PW + "\n")
+    assert guest.exit_code == 1 and "not allowed" in guest.output
+    # Changing your own password is still allowed.
     assert (
         runner.invoke(
             app,
-            ["user", "passwd", "alice", "--users-file", f, "--password-stdin"],
+            ["user", "passwd", "me", "--users-file", f, "--password-stdin", *cfg],
             input=PW + "x\n",
         ).exit_code
         == 0
     )
+    assert len(UsersFile(Path(f)).users()) == 1
+
+
+def test_user_cli(tmp_path: Path) -> None:
+    runner = CliRunner()
+    f = str(tmp_path / "users.toml")
+    wide = tmp_path / "cfg"
+    wide.mkdir()
+    (wide / "roles.toml").write_text(
+        (ROOT / "config" / "roles.toml")
+        .read_text()
+        .replace("max_users = 1", "max_users = 5")
+        .replace('roles = ["owner"]', 'roles = ["owner", "guest"]')
+    )
+    cfg = ["--config", str(wide)]
+    r = runner.invoke(
+        app,
+        ["user", "add", "alice", "--role", "owner", "--users-file", f, "--password-stdin", *cfg],
+        input=PW + "\n",
+    )
+    assert r.exit_code == 0, r.output
+    r = runner.invoke(
+        app,
+        ["user", "add", "bob", "--role", "guest", "--users-file", f, "--password-stdin", *cfg],
+        input="short\n",
+    )
+    assert r.exit_code == 1 and "at least 12" in r.output
+    listed = runner.invoke(app, ["user", "list", "--users-file", f]).output
+    assert "alice" in listed and "owner" in listed and "scrypt" not in listed
+    passwd = ["user", "passwd", "alice", "--users-file", f, "--password-stdin", *cfg]
+    assert runner.invoke(app, passwd, input=PW + "x\n").exit_code == 0
     assert runner.invoke(app, ["user", "remove", "alice", "--users-file", f]).exit_code == 0
     assert runner.invoke(app, ["user", "passwd", "nobody", "--users-file", f]).exit_code == 1
+
+
+def test_account_policy() -> None:
+    policy = load_account_policy(ROOT / "config" / "roles.toml")
+    assert policy == AccountPolicy(max_users=1, roles=("owner",))
+    policy.check_new({}, "me", "owner")
+    policy.check_new({"me": "owner"}, "me", "owner")  # replacing yourself is fine
+    with pytest.raises(ConfigError, match="limit"):
+        policy.check_new({"me": "owner"}, "other", "owner")
+    with pytest.raises(ConfigError, match="not allowed"):
+        policy.check_new({}, "me", "guest")
+    assert policy.allows({"me": "owner"}, "me")
+    assert not policy.allows({"me": "owner", "x": "owner"}, "me")
+    assert not policy.allows({"me": "guest"}, "me")

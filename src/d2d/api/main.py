@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -13,13 +13,21 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import Engine, create_engine, insert, select, text
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from d2d import __version__
 from d2d.agent.provider import OllamaProvider, Provider, load_llm
 from d2d.agent.runtime import Agent
 from d2d.agent.skills import load_skills
 from d2d.api.repo import Ontology
-from d2d.api.scope import ROLES, RolePolicy, Scope, load_roles
+from d2d.api.scope import (
+    ROLES,
+    AccountPolicy,
+    RolePolicy,
+    Scope,
+    load_account_policy,
+    load_roles,
+)
 from d2d.auth import COOKIE, AuthConfig, auth_from_env, fingerprint, verify_password
 from d2d.config import config_dir, load_categories, load_household
 from d2d.db import FEEDBACK_REASONS, chat_message, database_url, feedback
@@ -36,6 +44,7 @@ class AppContext:
     agent: Agent
     provider: Provider | None
     auth: AuthConfig | None = None
+    accounts: AccountPolicy = field(default_factory=lambda: AccountPolicy(1, ("owner",)))
 
 
 def build_context(
@@ -45,6 +54,7 @@ def build_context(
     skills_dir: Path,
     provider: Provider | None,
     auth: AuthConfig | None = None,
+    accounts: AccountPolicy | None = None,
 ) -> AppContext:
     household = load_household(cfg_dir / "household.toml")
     taxonomy = load_categories(cfg_dir / "categories.toml")
@@ -52,7 +62,8 @@ def build_context(
     onto = Ontology(engine, household, taxonomy, enrichment, data_dir)
     max_calls = load_llm(cfg_dir / "llm.toml").max_tool_calls
     agent = Agent(onto, provider, load_skills(skills_dir), max_calls)
-    return AppContext(onto, load_roles(cfg_dir / "roles.toml"), agent, provider, auth)
+    policy = accounts or load_account_policy(cfg_dir / "roles.toml")
+    return AppContext(onto, load_roles(cfg_dir / "roles.toml"), agent, provider, auth, policy)
 
 
 def default_context() -> AppContext:
@@ -117,8 +128,11 @@ def session_user(c: AppContext, request: Request) -> tuple[str, str] | None:
     claims = c.auth.signer.verify(token) if token else None
     if claims is None:
         return None
-    user = c.auth.users.get(claims[0])
+    users = c.auth.users.users()
+    user = users.get(claims[0])
     if user is None or fingerprint(user.password) != claims[1] or user.role not in c.roles:
+        return None
+    if not c.accounts.allows({u.username: u.role for u in users.values()}, user.username):
         return None
     return user.username, user.role
 
@@ -162,7 +176,23 @@ def require_owner(s: Scope) -> None:
         raise HTTPException(403, f"role {s.role} cannot change labels or cases")
 
 
-def create_app(context: AppContext | None = None, web_dist: Path | None = None) -> FastAPI:
+DEFAULT_HOSTS = ("127.0.0.1", "localhost")
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def create_app(
+    context: AppContext | None = None,
+    web_dist: Path | None = None,
+    allowed_hosts: list[str] | None = None,
+) -> FastAPI:
     # Interactive API docs only on request (D2D_API_DOCS=on); the public demo does not need them.
     docs = os.environ.get("D2D_API_DOCS") == "on"
     app = FastAPI(
@@ -173,18 +203,35 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
         openapi_url="/api/openapi.json" if docs else None,
     )
     app.state.ctx = context
+    # Only answer requests addressed to this machine (blocks DNS-rebinding from other websites).
+    # Add a tunnel hostname later with D2D_ALLOWED_HOSTS=127.0.0.1,localhost,demo.example.com.
+    hosts = allowed_hosts or [
+        h.strip() for h in os.environ.get("D2D_ALLOWED_HOSTS", ",".join(DEFAULT_HOSTS)).split(",")
+    ]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=[h for h in hosts if h])
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
+        return response
 
     @app.get("/api/health")
-    def health(c: Ctx) -> dict[str, Any]:
+    def health(c: Ctx, request: Request) -> dict[str, Any]:
+        rev = ROOT / "REVISION"
+        revision = rev.read_text().strip() if rev.is_file() else None
+        if c.auth is not None and session_user(c, request) is None:
+            # Public: just enough for the deploy health check.
+            return {"ok": True, "revision": revision}
         with c.onto.engine.connect() as conn:
             revision = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
         llm = c.provider.model_tag if c.provider else None
         available = isinstance(c.provider, OllamaProvider) and c.provider.available()
-        rev = ROOT / "REVISION"
         return {
             "ok": True,
             "version": __version__,
-            "revision": rev.read_text().strip() if rev.is_file() else None,
+            "revision": revision,
             "schema": revision,
             "llm": llm,
             "llm_available": available,
@@ -210,10 +257,14 @@ def create_app(context: AppContext | None = None, web_dist: Path | None = None) 
         keys = (f"user:{body.username.lower()}", f"ip:{client}")
         if c.auth.limiter.blocked(*keys):
             raise HTTPException(429, "too many failed logins; try again in 15 minutes")
-        user = c.auth.users.get(body.username.lower())
+        users = c.auth.users.users()
+        user = users.get(body.username.lower())
         # Verify against a dummy hash for unknown users so timing does not reveal valid names.
         encoded = user.password if user else _DUMMY_HASH
-        if not verify_password(body.password, encoded) or user is None:
+        allowed = user is not None and c.accounts.allows(
+            {u.username: u.role for u in users.values()}, user.username
+        )
+        if not verify_password(body.password, encoded) or not allowed or user is None:
             c.auth.limiter.fail(*keys)
             raise HTTPException(401, "wrong username or password")
         c.auth.limiter.reset(*keys)

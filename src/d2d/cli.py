@@ -15,7 +15,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
-from d2d.api.scope import ROLES
+from d2d.api.scope import ROLES, load_account_policy
 from d2d.auth import MIN_PASSWORD, AuthError, UsersFile, users_file_for
 from d2d.config import (
     ConfigError,
@@ -349,9 +349,21 @@ def _read_password(password_stdin: bool) -> str:
 
 
 def _save_user(
-    username: str, role: str, env: str | None, users_file: Path | None, password_stdin: bool
+    username: str,
+    role: str,
+    env: str | None,
+    users_file: Path | None,
+    password_stdin: bool,
+    config: Path | None,
 ) -> None:
     users = _users(env, users_file)
+    try:
+        policy = load_account_policy(config_dir(config) / "roles.toml")
+        existing = {u.username: u.role for u in users.users().values()}
+        policy.check_new(existing, username, role)
+    except ConfigError as exc:
+        typer.echo(f"blocked: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     try:
         users.set_user(username, role, _read_password(password_stdin), ROLES)
     except AuthError as exc:
@@ -363,13 +375,16 @@ def _save_user(
 @user_app.command("add")
 def user_add(
     username: str,
-    role: Annotated[str, typer.Option(help="owner, family, energy_advisor or guest.")] = "guest",
+    role: Annotated[str, typer.Option(help="Allowed roles: config/roles.toml [accounts].")] = (
+        "owner"
+    ),
     env: EnvOpt = None,
     users_file: UsersFileOpt = None,
     password_stdin: Annotated[bool, typer.Option(help="Read the password from stdin.")] = False,
+    config: ConfigDir = None,
 ) -> None:
-    """Create (or replace) an account; prompts for the password without echoing it."""
-    _save_user(username, role, env, users_file, password_stdin)
+    """Create (or replace) an account, within the [accounts] policy (default: one owner)."""
+    _save_user(username, role, env, users_file, password_stdin, config)
 
 
 @user_app.command("passwd")
@@ -378,13 +393,14 @@ def user_passwd(
     env: EnvOpt = None,
     users_file: UsersFileOpt = None,
     password_stdin: Annotated[bool, typer.Option(help="Read the password from stdin.")] = False,
+    config: ConfigDir = None,
 ) -> None:
     """Change a password (signs that user out everywhere)."""
     existing = _users(env, users_file).get(username)
     if existing is None:
         typer.echo(f"error: no user {username!r}", err=True)
         raise typer.Exit(code=1)
-    _save_user(username, existing.role, env, users_file, password_stdin)
+    _save_user(username, existing.role, env, users_file, password_stdin, config)
 
 
 @user_app.command("remove")

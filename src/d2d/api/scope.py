@@ -44,6 +44,40 @@ def load_roles(path: Path) -> dict[str, RolePolicy]:
     return policies
 
 
+@dataclass(frozen=True)
+class AccountPolicy:
+    max_users: int
+    roles: tuple[str, ...]
+
+    def check_new(self, existing: dict[str, str], username: str, role: str) -> None:
+        """Raise ConfigError if adding/replacing ``username`` with ``role`` breaks the policy."""
+        if role not in self.roles:
+            raise ConfigError(
+                f"accounts with role {role!r} are not allowed (config/roles.toml [accounts] roles)"
+            )
+        count = len(existing) + (0 if username in existing else 1)
+        if count > self.max_users:
+            raise ConfigError(
+                f"user limit reached ({self.max_users}); adding users is blocked by "
+                "config/roles.toml [accounts] max_users"
+            )
+
+    def allows(self, users: dict[str, str], username: str) -> bool:
+        """Login check: the file must respect the policy as a whole (fail closed)."""
+        if len(users) > self.max_users:
+            return False
+        return users.get(username) in self.roles
+
+
+def load_account_policy(path: Path) -> AccountPolicy:
+    raw = load_toml(path).get("accounts", {})
+    roles = tuple(raw.get("roles", ["owner"]))
+    unknown = set(roles) - set(ROLES)
+    if unknown:
+        raise ConfigError(f"roles.toml [accounts]: unknown roles {sorted(unknown)}")
+    return AccountPolicy(max_users=int(raw.get("max_users", 1)), roles=roles)
+
+
 class Scope:
     def __init__(
         self,

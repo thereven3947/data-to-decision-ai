@@ -72,7 +72,7 @@ def engine(
 
 def _client(engine: Engine, run_data: Path, provider: Any = None) -> TestClient:
     ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", provider)
-    return TestClient(create_app(ctx, web_dist=Path("/nonexistent")))
+    return TestClient(create_app(ctx, web_dist=Path("/nonexistent"), allowed_hosts=["testserver"]))
 
 
 def _get(client: TestClient, path: str, role: str = "owner") -> Any:
@@ -254,6 +254,10 @@ def test_health_and_meta(engine: Engine, run_data: Path) -> None:
     client = _client(engine, run_data)
     health = _get(client, "/health")
     assert health["schema"] == "0004" and health["llm"] is None
+    r = client.get("/api/health")
+    assert r.headers["x-frame-options"] == "DENY"
+    assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    assert client.get("/api/health", headers={"Host": "evil.example"}).status_code == 400
     meta = _get(client, "/meta", "energy_advisor")
     assert meta["can_label"] is False and all(c["energy"] for c in meta["categories"])
 
@@ -267,8 +271,15 @@ def _auth_client(engine: Engine, run_data: Path, tmp_path: Path) -> tuple[TestCl
 
     auth.users.set_user("alice", "owner", "alice-password-123", ROLES)
     auth.users.set_user("gail", "guest", "gail-password-123", ROLES)
-    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth)
-    return TestClient(create_app(ctx, web_dist=Path("/nonexistent"))), auth
+    from d2d.api.scope import AccountPolicy
+
+    # Two accounts with different roles, so the tests widen the default one-owner policy.
+    wide = AccountPolicy(max_users=5, roles=ROLES)
+    ctx = build_context(
+        engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth, wide
+    )
+    app = create_app(ctx, web_dist=Path("/nonexistent"), allowed_hosts=["testserver"])
+    return TestClient(app), auth
 
 
 def test_login_required_and_roles_come_from_the_account(
@@ -337,3 +348,30 @@ def test_login_is_rate_limited(engine: Engine, run_data: Path, tmp_path: Path) -
         "/api/auth/login", json={"username": "alice", "password": "alice-password-123"}
     )
     assert right.status_code == 429  # still locked out for this window
+
+
+def test_default_policy_allows_only_one_owner_and_fails_closed(
+    engine: Engine, run_data: Path, tmp_path: Path
+) -> None:
+    from d2d.api.scope import ROLES
+    from d2d.auth import auth_from_env
+
+    auth = auth_from_env({"D2D_SECRET_KEY": "s" * 40, "D2D_USERS_FILE": str(tmp_path / "u.toml")})
+    assert auth is not None
+    auth.users.set_user("owner1", "owner", "owner-password-123", ROLES)
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None, auth)
+    client = TestClient(create_app(ctx, web_dist=Path("/x"), allowed_hosts=["testserver"]))
+
+    public = client.get("/api/health").json()
+    assert set(public) == {"ok", "revision"}  # no model or schema details before login
+    login = {"username": "owner1", "password": "owner-password-123"}
+    assert client.post("/api/auth/login", json=login).status_code == 200
+    assert client.get("/api/stories").status_code == 200
+    assert "llm" in client.get("/api/health").json()
+
+    # Someone appends a second account by hand: every login and session stops working.
+    auth.users.set_user("intruder", "guest", "intruder-pass-123", ROLES)
+    assert client.get("/api/stories").status_code == 401
+    assert client.post("/api/auth/login", json=login).status_code == 401
+    intr = {"username": "intruder", "password": "intruder-pass-123"}
+    assert client.post("/api/auth/login", json=intr).status_code == 401
