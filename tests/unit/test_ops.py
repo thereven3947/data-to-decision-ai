@@ -62,6 +62,7 @@ def test_launchd_plist_cli_rejects_unknown_env(tmp_path: Path) -> None:
     [
         "deploy/deploy.sh",
         "deploy/pipeline.sh",
+        "deploy/backup.sh",
         "deploy/runner/install.sh",
         "analytics/bigquery/load.sh",
     ],

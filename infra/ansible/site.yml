@@ -1,0 +1,197 @@
+# Mac mini host setup as code: docs/mac-mini-setup.md steps 1-3 and 6, idempotent.
+# Run on the Mac mini itself (local connection) or over SSH/Tailscale:
+#   ansible-playbook -i infra/ansible/inventory.example.ini infra/ansible/site.yml
+#   ansible-playbook ... --tags power --ask-become-pass   # the only step that needs sudo
+# GUI installs (OrbStack, Tailscale) and the GitHub runner (deploy/runner/install.sh) stay manual.
+- name: D2D Mac mini host
+  hosts: mac_mini
+  gather_facts: true
+  vars:
+    home: "{{ ansible_facts['env']['HOME'] }}"
+    local_bin: "{{ home }}/.local/bin"
+    local_opt: "{{ home }}/.local/opt"
+    gh_version: "2.102.0"
+    ollama_models:
+      - qwen3:14b
+      - qwen3:8b
+      - nomic-embed-text
+    ollama_plist: "{{ home }}/Library/LaunchAgents/com.ollama.serve.plist"
+    project_dir: "{{ home }}/Documents/project"
+    repo_dir: "{{ project_dir }}/data-to-decision-ai"
+
+  pre_tasks:
+    - name: Require macOS on Apple silicon
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['system'] == 'Darwin'
+          - ansible_facts['architecture'] in ['arm64', 'aarch64']
+        fail_msg: "This playbook targets the Apple-silicon Mac mini."
+      tags: [always]
+
+  tasks:
+    # 1. macOS basics -----------------------------------------------------------------------
+    - name: Read power settings
+      ansible.builtin.command: pmset -g
+      register: pmset
+      changed_when: false
+      tags: [power]
+
+    - name: Never sleep and restart after a power failure
+      ansible.builtin.command: pmset -a sleep 0 autorestart 1
+      become: true
+      when: >-
+        (pmset.stdout is not search('(?m)^\\s*sleep\\s+0\\b'))
+        or (pmset.stdout is not search('(?m)^\\s*autorestart\\s+1\\b'))
+      changed_when: true
+      tags: [power]
+
+    # 2. Developer tools (per user under ~/.local, no admin password) ------------------------
+    - name: Create ~/.local directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: ["{{ local_bin }}", "{{ local_opt }}", "{{ home }}/Library/LaunchAgents", "{{ home }}/Library/Logs"]
+      tags: [tools]
+
+    - name: Install uv
+      ansible.builtin.shell: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | sh
+      args:
+        executable: /bin/bash
+        creates: "{{ local_bin }}/uv"
+      tags: [tools]
+
+    - name: Download GitHub CLI {{ gh_version }}
+      ansible.builtin.get_url:
+        url: "https://github.com/cli/cli/releases/download/v{{ gh_version }}/gh_{{ gh_version }}_macOS_arm64.zip"
+        dest: "/tmp/gh_{{ gh_version }}.zip"
+        mode: "0644"
+      tags: [tools]
+
+    - name: Unpack GitHub CLI
+      ansible.builtin.unarchive:
+        src: "/tmp/gh_{{ gh_version }}.zip"
+        dest: "{{ local_opt }}"
+        remote_src: true
+        creates: "{{ local_opt }}/gh_{{ gh_version }}_macOS_arm64/bin/gh"
+      tags: [tools]
+
+    - name: Link gh
+      ansible.builtin.file:
+        src: "{{ local_opt }}/gh_{{ gh_version }}_macOS_arm64/bin/gh"
+        dest: "{{ local_bin }}/gh"
+        state: link
+        force: true
+      tags: [tools]
+
+    # 3. Ollama as a per-user LaunchAgent on the Apple GPU ----------------------------------
+    - name: Download Ollama
+      ansible.builtin.get_url:
+        url: https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz
+        dest: /tmp/ollama-darwin.tgz
+        mode: "0644"
+      tags: [ollama]
+
+    - name: Create Ollama directory
+      ansible.builtin.file:
+        path: "{{ local_opt }}/ollama"
+        state: directory
+        mode: "0755"
+      tags: [ollama]
+
+    - name: Unpack Ollama
+      ansible.builtin.unarchive:
+        src: /tmp/ollama-darwin.tgz
+        dest: "{{ local_opt }}/ollama"
+        remote_src: true
+        creates: "{{ local_opt }}/ollama/ollama"
+      tags: [ollama]
+
+    - name: Link ollama
+      ansible.builtin.file:
+        src: "{{ local_opt }}/ollama/ollama"
+        dest: "{{ local_bin }}/ollama"
+        state: link
+        force: true
+      tags: [ollama]
+
+    - name: Ollama LaunchAgent
+      ansible.builtin.template:
+        src: templates/com.ollama.serve.plist.j2
+        dest: "{{ ollama_plist }}"
+        mode: "0644"
+      notify: Restart Ollama
+      tags: [ollama]
+
+    - name: Check whether the Ollama agent is loaded
+      ansible.builtin.command: launchctl print gui/{{ ansible_facts['user_uid'] }}/com.ollama.serve
+      register: ollama_agent
+      changed_when: false
+      failed_when: false
+      tags: [ollama]
+
+    - name: Load the Ollama agent
+      ansible.builtin.command: launchctl bootstrap gui/{{ ansible_facts['user_uid'] }} {{ ollama_plist }}
+      when: ollama_agent.rc != 0
+      changed_when: true
+      tags: [ollama]
+
+    - name: Apply a changed agent before pulling models
+      ansible.builtin.meta: flush_handlers
+      tags: [ollama]
+
+    - name: Wait for the Ollama API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:11434/api/version
+        return_content: true
+      register: ollama_version
+      retries: 20
+      delay: 3
+      until: ollama_version.status == 200
+      tags: [ollama]
+
+    - name: List installed models
+      ansible.builtin.command: "{{ local_bin }}/ollama list"
+      register: ollama_list
+      changed_when: false
+      tags: [ollama, models]
+
+    - name: Pull missing models
+      ansible.builtin.command: "{{ local_bin }}/ollama pull {{ item }}"
+      loop: "{{ ollama_models }}"
+      when: ollama_list.stdout is not search('(?m)^' ~ (item | regex_escape) ~ '(:latest)?\\s')
+      changed_when: true
+      tags: [ollama, models]
+
+    # 6. Secrets: both .env files exist only on this machine and are private ----------------
+    - name: Find .env files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: ["{{ project_dir }}/.env", "{{ repo_dir }}/.env"]
+      register: env_files
+      tags: [secrets]
+
+    - name: Make .env files private (0600)
+      ansible.builtin.file:
+        path: "{{ item.stat.path }}"
+        mode: "0600"
+      loop: "{{ env_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.stat.exists
+      tags: [secrets]
+
+    - name: Report missing .env files
+      ansible.builtin.debug:
+        msg: "{{ item.item }} is missing: copy .env.example and fill it (docs/mac-mini-setup.md step 6)."
+      loop: "{{ env_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: not item.stat.exists
+      tags: [secrets]
+
+  handlers:
+    - name: Restart Ollama
+      ansible.builtin.command: launchctl kickstart -k gui/{{ ansible_facts['user_uid'] }}/com.ollama.serve
+      changed_when: true
+      failed_when: false

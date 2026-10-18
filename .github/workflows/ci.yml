@@ -68,3 +68,25 @@ jobs:
           npm test
           npm run lint
           npm run build
+
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+      - name: terraform (fmt, validate, mocked tests)
+        run: |
+          terraform -chdir=infra/terraform fmt -check -recursive
+          for m in gcp aws; do
+            terraform -chdir=infra/terraform/$m init -backend=false -input=false
+            terraform -chdir=infra/terraform/$m validate
+            terraform -chdir=infra/terraform/$m test
+          done
+      - uses: astral-sh/setup-uv@v6
+      - name: ansible (syntax check)
+        run: >-
+          uvx --from ansible-core ansible-playbook -i infra/ansible/inventory.example.ini
+          infra/ansible/site.yml --syntax-check
