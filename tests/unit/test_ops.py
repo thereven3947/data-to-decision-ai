@@ -58,7 +58,13 @@ def test_launchd_plist_cli_rejects_unknown_env(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "script", ["deploy/deploy.sh", "deploy/pipeline.sh", "deploy/runner/install.sh"]
+    "script",
+    [
+        "deploy/deploy.sh",
+        "deploy/pipeline.sh",
+        "deploy/runner/install.sh",
+        "analytics/bigquery/load.sh",
+    ],
 )
 def test_deploy_scripts_are_valid_bash(script: str) -> None:
     subprocess.run(["bash", "-n", str(ROOT / script)], check=True)

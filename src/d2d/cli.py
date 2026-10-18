@@ -16,6 +16,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
+from d2d.analytics import export_warehouse
 from d2d.api.repo import Ontology
 from d2d.api.scope import ROLES, Scope, load_account_policy, load_roles
 from d2d.auth import MIN_PASSWORD, AuthError, UsersFile, users_file_for
@@ -73,6 +74,8 @@ security_app = typer.Typer(
     no_args_is_help=True, help="Unexpected/unauthorized configuration changes (OT security)."
 )
 app.add_typer(security_app, name="security")
+export_app = typer.Typer(no_args_is_help=True, help="Analytics exports (BigQuery / Looker).")
+app.add_typer(export_app, name="export")
 user_app = typer.Typer(
     no_args_is_help=True,
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
@@ -614,6 +617,34 @@ def eval_changelog(
 
 def _voltage(cfg_dir: Path) -> float:
     return load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml").tariff.voltage
+
+
+@export_app.command("warehouse")
+def export_warehouse_cmd(
+    data_dir: DataDir = Path("data"),
+    out: Annotated[
+        Path | None, typer.Option(help="Output dir (default <data-dir>/warehouse).")
+    ] = None,
+    no_db: Annotated[
+        bool, typer.Option("--no-db", help="Pipeline files only (no labels, agent, feedback).")
+    ] = False,
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Star-schema Parquet export for BigQuery / Looker (analytics/bigquery/load.sh loads it)."""
+    cfg_dir = config_dir(config)
+    engine = None if no_db else _engine(database_url)
+    with _db_errors():
+        counts = export_warehouse(
+            data_dir,
+            out or data_dir / "warehouse",
+            load_household(cfg_dir / "household.toml"),
+            load_categories(cfg_dir / "categories.toml"),
+            engine,
+        )
+    for name, rows in counts.items():
+        typer.echo(f"{name:<22}{rows:>6} rows")
+    typer.echo(f"-> {out or data_dir / 'warehouse'}")
 
 
 @security_app.command("scan")

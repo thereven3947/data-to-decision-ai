@@ -612,3 +612,23 @@ def test_list_stories_tool_reports_coverage_totals_and_date_filters(
     assert 0 < one["total_matching"] < total
     with pytest.raises(ToolError):
         run_tool("list_stories", {"since": "yesterday"}, ctx.onto, owner)
+
+
+def test_warehouse_export_with_database(
+    engine: Engine, run_data: Path, household: Household, tmp_path: Path
+) -> None:
+    import pyarrow.parquet as pq
+
+    from d2d.analytics import export_warehouse
+
+    taxonomy = load_categories(ROOT / "config" / "categories.toml")
+    counts = export_warehouse(run_data, tmp_path, household, taxonomy, engine)
+    stories = pq.read_table(tmp_path / "fact_story.parquet").to_pylist()
+    assert counts["fact_story"] == len(stories) > 0
+    labeled = [s for s in stories if s["category_id"]]
+    assert labeled and all(s["category_id"] in taxonomy.categories for s in labeled)
+    assert all(s["label_source"] for s in labeled)
+    answers = pq.read_table(tmp_path / "fact_agent_answer.parquet").to_pylist()
+    assert counts["fact_agent_answer"] == len(answers) > 0
+    assert all(isinstance(a["grounded"], bool) and a["latency_ms"] >= 0 for a in answers)
+    assert counts["fact_feedback"] > 0
