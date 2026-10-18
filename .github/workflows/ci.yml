@@ -36,6 +36,8 @@ jobs:
       - run: uv run d2d run --data-dir data/check
       - run: uv run d2d eval changelog --data-dir data/check
       - run: uv run d2d eval linking --data-dir data/check
+      - run: uv run d2d security scan --data-dir data/check
+      - run: uv run d2d eval security --data-dir data/check
       - run: uv run d2d review export --no-db --data-dir data/check
       - run: uv run d2d train --training-set data/check/labels/training_set.jsonl --models-dir data/check/models
       - run: uv run d2d eval classifier --models-dir data/check/models

@@ -57,6 +57,7 @@ from d2d.ops import api_plist, backup_plist, pipeline_plist
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
+from d2d.security import evaluate_security, read_events, score_events, write_alerts
 from d2d.simulator import simulate as run_simulation
 from d2d.simulator import write_cdc, write_ground_truth, write_snapshots
 from d2d.simulator.cdc import mirror_cdc_state, plan_cdc
@@ -68,6 +69,10 @@ review_app = typer.Typer(no_args_is_help=True, help="Stages 5-6: review queue, l
 app.add_typer(review_app, name="review")
 feedback_app = typer.Typer(no_args_is_help=True, help="Stage 12: route feedback, export evals.")
 app.add_typer(feedback_app, name="feedback")
+security_app = typer.Typer(
+    no_args_is_help=True, help="Unexpected/unauthorized configuration changes (OT security)."
+)
+app.add_typer(security_app, name="security")
 user_app = typer.Typer(
     no_args_is_help=True,
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
@@ -604,6 +609,72 @@ def eval_changelog(
     ]
     typer.echo("gate: PASS" if all(gates) else "gate: FAIL")
     if not all(gates):
+        raise typer.Exit(code=1)
+
+
+def _voltage(cfg_dir: Path) -> float:
+    return load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml").tariff.voltage
+
+
+@security_app.command("scan")
+def security_scan(
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    top: Annotated[int, typer.Option(help="Changes to print.")] = 10,
+) -> None:
+    """Score config/topology changes vs the approved baseline; write security/alerts.parquet."""
+    cfg_dir = config_dir(config)
+    try:
+        events = read_events(data_dir)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    scored = score_events(
+        events, load_household(cfg_dir / "household.toml"), voltage=_voltage(cfg_dir)
+    )
+    path = write_alerts(scored, data_dir)
+    alerts = [s for s in scored if s.alert]
+    typer.echo(f"{len(scored)} config/topology changes scored, {len(alerts)} alert(s) -> {path}")
+    for s in scored[:top]:
+        flag = "ALERT" if s.alert else "     "
+        typer.echo(
+            f"{flag} {s.score:.2f}  {s.device_id}.{s.property}: {s.old_value} -> {s.new_value}"
+            f"  [{', '.join(s.reasons)}]"
+        )
+
+
+@eval_app.command("security")
+def eval_security(
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    trials: Annotated[int, typer.Option(help="Red-team trials (one attack of each type).")] = 25,
+    seed: Annotated[int, typer.Option(help="Seed for attack times and devices.")] = 7,
+    min_precision_at_k: Annotated[float, typer.Option(help="Gate: precision@k.")] = 0.8,
+    min_recall: Annotated[float, typer.Option(help="Gate: attack recall at threshold.")] = 0.8,
+    max_false_alerts: Annotated[float, typer.Option(help="Gate: false alerts per trial.")] = 1.0,
+) -> None:
+    """Inject simulated attacks into the change stream; exit 1 if a detection gate fails."""
+    cfg_dir = config_dir(config)
+    household = load_household(cfg_dir / "household.toml")
+    try:
+        events = read_events(data_dir)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    r = evaluate_security(events, household, trials, seed, _voltage(cfg_dir))
+    typer.echo(f"trials             {r.trials}  ({r.injected} injected attacks)")
+    typer.echo(f"precision@k        {r.precision_at_k:.3f}")
+    typer.echo(f"recall             {r.recall:.3f}")
+    typer.echo(
+        f"false alerts/trial {r.false_alerts_per_trial:.2f}  (clean stream: {r.clean_false_alerts})"
+    )
+    for kind, value in r.recall_by_attack.items():
+        typer.echo(f"  {kind:<26}{value:.3f}")
+    ok = (
+        r.precision_at_k >= min_precision_at_k
+        and r.recall >= min_recall
+        and r.false_alerts_per_trial <= max_false_alerts
+    )
+    typer.echo("gate: PASS" if ok else "gate: FAIL")
+    if not ok:
         raise typer.Exit(code=1)
 
 
