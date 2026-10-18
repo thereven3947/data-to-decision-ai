@@ -144,6 +144,8 @@ workflow runs again.
    ```
 4. Set the repository variable `D2D_LIVE_URL=https://<mac>.<tailnet>.ts.net` and re-run the
    `pages` workflow (Actions → pages → Run workflow). The button appears on the public demo.
+   (This repository also has its owner's address as the fallback in `.github/workflows/pages.yml`,
+   guarded by the repository name so forks never link to it.)
 5. Invite testers: `d2d user add <name> --role guest --env production` (see the local runbook).
    Each guest may ask the Copilot 3 questions per rolling hour (`config/llm.toml` `[limits]`); the
    app shows how long to wait when the limit is reached.

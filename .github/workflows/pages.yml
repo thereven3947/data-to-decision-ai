@@ -61,8 +61,10 @@ jobs:
         env:
           VITE_DEMO: "1"
           VITE_BASE: /${{ github.event.repository.name }}/
-          # Public address of the live beta for the "Sign in" button (repo variable; empty = hidden).
-          VITE_LIVE_URL: ${{ vars.D2D_LIVE_URL }}
+          # Public address of the live beta for the "Sign in" button: the repo variable D2D_LIVE_URL
+          # if set, else the owner's Tailscale Funnel address - only in this repository, so forks
+          # and clones never link to the owner's Mac mini.
+          VITE_LIVE_URL: ${{ vars.D2D_LIVE_URL || (github.repository == 'thereven3947/data-to-decision-ai' && 'https://thereven3947mac-mini.tail1fb25c.ts.net' || '') }}
         run: |
           npm ci --no-audit --no-fund
           npm run build
