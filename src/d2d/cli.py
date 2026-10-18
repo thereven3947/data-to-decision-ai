@@ -16,6 +16,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
+from d2d.agent.search import StorySearch, embedder_from_config, load_embeddings
 from d2d.analytics import export_warehouse
 from d2d.api.repo import Ontology
 from d2d.api.scope import ROLES, Scope, load_account_policy, load_roles
@@ -454,7 +455,29 @@ def _ontology(cfg_dir: Path, data_dir: Path, engine: Engine) -> Ontology:
         load_categories(cfg_dir / "categories.toml"),
         load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml"),
         data_dir,
+        StorySearch(embedder_from_config(load_embeddings(cfg_dir / "llm.toml"))),
     )
+
+
+@app.command("mcp")
+def mcp_cmd(
+    role: Annotated[
+        str, typer.Option(help="Role every tool call runs as (least privilege by default).")
+    ] = "guest",
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Serve the read-only Copilot tools over MCP (stdio) for Claude Desktop, VS Code, ..."""
+    from d2d.mcp_server import build_server
+
+    cfg_dir = config_dir(config)
+    roles = load_roles(cfg_dir / "roles.toml")
+    if role not in roles:
+        raise typer.BadParameter(f"unknown role {role!r}; expected one of {', '.join(ROLES)}")
+    onto = _ontology(cfg_dir, data_dir, _engine(database_url))
+    scope = Scope(roles[role], onto.household, onto.taxonomy, username=f"mcp:{role}")
+    build_server(onto, scope).run("stdio")
 
 
 @app.command()

@@ -657,3 +657,34 @@ def test_search_stories_tool_ranks_by_meaning_within_scope(engine: Engine, run_d
     assert {s["story_id"] for s in found["stories"]} <= visible
     with pytest.raises(ToolError):
         run_tool("search_stories", {"query": "  "}, ctx.onto, owner)
+
+
+def test_mcp_server_serves_scoped_ontology(engine: Engine, run_data: Path) -> None:
+    import anyio
+    from mcp.client.client import Client
+
+    from d2d.agent.search import HashingEmbedder, StorySearch
+    from d2d.api.scope import Scope, load_roles
+    from d2d.mcp_server import build_server
+
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    ctx.onto.search = StorySearch(HashingEmbedder())
+    guest = Scope(
+        load_roles(ROOT / "config" / "roles.toml")["guest"], ctx.onto.household, ctx.onto.taxonomy
+    )
+    visible = {s["story_id"] for s in ctx.onto.list_stories(guest, limit=100_000)}
+
+    async def main() -> tuple[Any, Any, Any]:
+        async with Client(build_server(ctx.onto, guest)) as client:
+            listed = await client.call_tool("list_stories", {"limit": 25})
+            found = await client.call_tool("search_stories", {"query": "garage door"})
+            hidden = await client.call_tool(
+                "get_device_history", {"device_id": "smart_plug_office"}
+            )
+            return listed, found, hidden
+
+    listed, found, hidden = anyio.run(main)
+    assert not listed.is_error and listed.structured_content["total_matching"] == len(visible)
+    assert {s["story_id"] for s in listed.structured_content["stories"]} <= visible
+    assert {s["story_id"] for s in found.structured_content["stories"]} <= visible
+    assert hidden.is_error  # a bedroom device is outside the guest's shared rooms
