@@ -104,6 +104,47 @@ Please open a private report through the repository's **Security** tab instead o
 | 11 | Copilot agent | Local open-source LLM + read-only tools + coded skills |
 | 12 | Chat + feedback | Chat history, corrections, reported issues → routed back to stages 2/4/5/6/8/11 |
 
+### Architecture
+
+```mermaid
+flowchart LR
+  subgraph DATA["Data plane (pipelines)"]
+    S1["1 Asset snapshots<br/>simulator / Home Assistant"] --> S2["2 Semantic changelog<br/>old → new + meaning"]
+    S2 --> S3["3 Change events<br/>property + ts per device"]
+    S3 --> S4["4 Event linking<br/>device · circuit · upstream · time"]
+  end
+
+  subgraph INTEL["Intelligence plane"]
+    S5["5 Human categorization<br/>review queue + cases"] -->|labels| S6["6 Labeled training set"]
+    S6 --> S7["7 ML classifier<br/>precision-first, abstain"]
+    S7 --> S8["8 Enrichment<br/>templated description + impact"]
+    S8 --> S9["9 Ontology<br/>stories · category · confidence · cases"]
+    S9 --> S10["10 Ontology API<br/>per-user permissions"]
+  end
+
+  subgraph APP["Interaction plane (web app)"]
+    UI["Change Control UI<br/>alerts · review · playbooks · cases"]
+    S11["11 Copilot agent<br/>read-only tools + coded skills"] --> ANS["Answers<br/>chat · briefings · action items to confirm"]
+    ANS --> S12["12 Chat history + feedback"]
+  end
+
+  S4 -->|new groups| S7
+  S7 -->|abstain| S5
+  S10 --> UI
+  S10 --> S11
+
+  S12 -.->|label corrections → retrain| S6
+  S12 -.->|description quality| S8
+  S12 -.->|missing / wrong data| S2
+  S12 -.->|answer / skill quality| S11
+  UI  -.->|alert usefulness| S4
+  UI  -.->|case confirmed / recorded| S5
+```
+
+Solid arrows run automatically. Dotted arrows are **feedback loops**; every one ends in a human
+decision or a human-approved calibration pull request. See the [full architecture](docs/architecture.md)
+for components, deployment, and data lineage.
+
 ## Where things run
 
 | Machine | Role |
