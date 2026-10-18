@@ -18,3 +18,11 @@ users.toml
 docs/local/
 # demo snapshot generated at build time (scripts/export_demo.py)
 web/public/demo/
+# terraform: provider cache, state and real variable files (examples are committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+# ansible: a local inventory with real hosts
+infra/ansible/inventory.ini

@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from d2d.agent.search import HashingEmbedder, StorySearch
 from d2d.api.repo import Ontology
 from d2d.api.scope import Scope
 
@@ -73,8 +74,20 @@ TOOL_SPECS = [
         ["category"],
     ),
     _fn("get_kpis", "Story counts by status, label source and category; review backlog.", {}, []),
+    _fn(
+        "search_stories",
+        "Find stories and category playbooks by meaning, for questions that name no category, "
+        "device or date (e.g. 'anything risky with hot water?'). Returns the closest matches, "
+        "each with a 0-1 relevance score; low scores mean a weak match.",
+        {
+            "query": {**_STR, "description": "What to look for, in plain words"},
+            "limit": {"type": "integer", "description": "Max stories (default 5, max 10)"},
+        },
+        ["query"],
+    ),
 ]
 TOOL_NAMES = {t["function"]["name"] for t in TOOL_SPECS}
+_LEXICAL = StorySearch(HashingEmbedder())
 
 
 _TZ: dict[str, ZoneInfo] = {}
@@ -248,4 +261,22 @@ def run_tool(name: str, args: dict[str, Any], onto: Ontology, scope: Scope) -> d
         }
     if name == "get_kpis":
         return onto.kpis(scope)
+    if name == "search_stories":
+        query = str(args.get("query") or "").strip()
+        if not query:
+            raise ToolError("query is required")
+        limit = max(1, min(int(args.get("limit") or 5), 10))
+        method, stories, playbooks = (onto.search or _LEXICAL).search(query, onto, scope, limit)
+        return {
+            "query": query,
+            "method": method,
+            "stories": [
+                {**_story_brief(s, tz), "summary": s["summary"], "score": round(score, 3)}
+                for score, s in stories
+            ],
+            "playbooks": [
+                {"category": c.id, "name": c.name, "score": round(score, 3)}
+                for score, c in playbooks
+            ],
+        }
     raise ToolError(f"unknown tool {name!r}")

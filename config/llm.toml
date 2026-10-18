@@ -9,6 +9,14 @@ num_ctx = 8192
 temperature = 0.2
 max_tool_calls = 6
 
+# Semantic search for the search_stories tool (stories + category playbooks). nomic-embed-text is
+# pulled in docs/mac-mini-setup.md step 3. If Ollama is unreachable, a request falls back to
+# lexical matching and reports it. provider = "hashing" uses lexical matching only (no model).
+[embeddings]
+provider = "ollama"
+model = "nomic-embed-text"
+timeout_s = 30
+
 # Copilot guard: the local LLM uses the Mac mini's GPU, so answers are rationed once the live beta
 # is reachable from the internet. The owner is exempt from the hourly quota.
 [limits]

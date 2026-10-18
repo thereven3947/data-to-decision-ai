@@ -16,6 +16,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from d2d import __version__
+from d2d.agent.search import StorySearch, embedder_from_config, load_embeddings
+from d2d.analytics import export_warehouse
 from d2d.api.repo import Ontology
 from d2d.api.scope import ROLES, Scope, load_account_policy, load_roles
 from d2d.auth import MIN_PASSWORD, AuthError, UsersFile, users_file_for
@@ -57,6 +59,7 @@ from d2d.ops import api_plist, backup_plist, pipeline_plist
 from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
+from d2d.security import evaluate_security, read_events, score_events, write_alerts
 from d2d.simulator import simulate as run_simulation
 from d2d.simulator import write_cdc, write_ground_truth, write_snapshots
 from d2d.simulator.cdc import mirror_cdc_state, plan_cdc
@@ -68,6 +71,12 @@ review_app = typer.Typer(no_args_is_help=True, help="Stages 5-6: review queue, l
 app.add_typer(review_app, name="review")
 feedback_app = typer.Typer(no_args_is_help=True, help="Stage 12: route feedback, export evals.")
 app.add_typer(feedback_app, name="feedback")
+security_app = typer.Typer(
+    no_args_is_help=True, help="Unexpected/unauthorized configuration changes (OT security)."
+)
+app.add_typer(security_app, name="security")
+export_app = typer.Typer(no_args_is_help=True, help="Analytics exports (BigQuery / Looker).")
+app.add_typer(export_app, name="export")
 user_app = typer.Typer(
     no_args_is_help=True,
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
@@ -446,7 +455,29 @@ def _ontology(cfg_dir: Path, data_dir: Path, engine: Engine) -> Ontology:
         load_categories(cfg_dir / "categories.toml"),
         load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml"),
         data_dir,
+        StorySearch(embedder_from_config(load_embeddings(cfg_dir / "llm.toml"))),
     )
+
+
+@app.command("mcp")
+def mcp_cmd(
+    role: Annotated[
+        str, typer.Option(help="Role every tool call runs as (least privilege by default).")
+    ] = "guest",
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Serve the read-only Copilot tools over MCP (stdio) for Claude Desktop, VS Code, ..."""
+    from d2d.mcp_server import build_server
+
+    cfg_dir = config_dir(config)
+    roles = load_roles(cfg_dir / "roles.toml")
+    if role not in roles:
+        raise typer.BadParameter(f"unknown role {role!r}; expected one of {', '.join(ROLES)}")
+    onto = _ontology(cfg_dir, data_dir, _engine(database_url))
+    scope = Scope(roles[role], onto.household, onto.taxonomy, username=f"mcp:{role}")
+    build_server(onto, scope).run("stdio")
 
 
 @app.command()
@@ -604,6 +635,100 @@ def eval_changelog(
     ]
     typer.echo("gate: PASS" if all(gates) else "gate: FAIL")
     if not all(gates):
+        raise typer.Exit(code=1)
+
+
+def _voltage(cfg_dir: Path) -> float:
+    return load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml").tariff.voltage
+
+
+@export_app.command("warehouse")
+def export_warehouse_cmd(
+    data_dir: DataDir = Path("data"),
+    out: Annotated[
+        Path | None, typer.Option(help="Output dir (default <data-dir>/warehouse).")
+    ] = None,
+    no_db: Annotated[
+        bool, typer.Option("--no-db", help="Pipeline files only (no labels, agent, feedback).")
+    ] = False,
+    config: ConfigDir = None,
+    database_url: DatabaseUrl = None,
+) -> None:
+    """Star-schema Parquet export for BigQuery / Looker (analytics/bigquery/load.sh loads it)."""
+    cfg_dir = config_dir(config)
+    engine = None if no_db else _engine(database_url)
+    with _db_errors():
+        counts = export_warehouse(
+            data_dir,
+            out or data_dir / "warehouse",
+            load_household(cfg_dir / "household.toml"),
+            load_categories(cfg_dir / "categories.toml"),
+            engine,
+        )
+    for name, rows in counts.items():
+        typer.echo(f"{name:<22}{rows:>6} rows")
+    typer.echo(f"-> {out or data_dir / 'warehouse'}")
+
+
+@security_app.command("scan")
+def security_scan(
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    top: Annotated[int, typer.Option(help="Changes to print.")] = 10,
+) -> None:
+    """Score config/topology changes vs the approved baseline; write security/alerts.parquet."""
+    cfg_dir = config_dir(config)
+    try:
+        events = read_events(data_dir)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    scored = score_events(
+        events, load_household(cfg_dir / "household.toml"), voltage=_voltage(cfg_dir)
+    )
+    path = write_alerts(scored, data_dir)
+    alerts = [s for s in scored if s.alert]
+    typer.echo(f"{len(scored)} config/topology changes scored, {len(alerts)} alert(s) -> {path}")
+    for s in scored[:top]:
+        flag = "ALERT" if s.alert else "     "
+        typer.echo(
+            f"{flag} {s.score:.2f}  {s.device_id}.{s.property}: {s.old_value} -> {s.new_value}"
+            f"  [{', '.join(s.reasons)}]"
+        )
+
+
+@eval_app.command("security")
+def eval_security(
+    data_dir: DataDir = Path("data"),
+    config: ConfigDir = None,
+    trials: Annotated[int, typer.Option(help="Red-team trials (one attack of each type).")] = 25,
+    seed: Annotated[int, typer.Option(help="Seed for attack times and devices.")] = 7,
+    min_precision_at_k: Annotated[float, typer.Option(help="Gate: precision@k.")] = 0.8,
+    min_recall: Annotated[float, typer.Option(help="Gate: attack recall at threshold.")] = 0.8,
+    max_false_alerts: Annotated[float, typer.Option(help="Gate: false alerts per trial.")] = 1.0,
+) -> None:
+    """Inject simulated attacks into the change stream; exit 1 if a detection gate fails."""
+    cfg_dir = config_dir(config)
+    household = load_household(cfg_dir / "household.toml")
+    try:
+        events = read_events(data_dir)
+    except FileNotFoundError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    r = evaluate_security(events, household, trials, seed, _voltage(cfg_dir))
+    typer.echo(f"trials             {r.trials}  ({r.injected} injected attacks)")
+    typer.echo(f"precision@k        {r.precision_at_k:.3f}")
+    typer.echo(f"recall             {r.recall:.3f}")
+    typer.echo(
+        f"false alerts/trial {r.false_alerts_per_trial:.2f}  (clean stream: {r.clean_false_alerts})"
+    )
+    for kind, value in r.recall_by_attack.items():
+        typer.echo(f"  {kind:<26}{value:.3f}")
+    ok = (
+        r.precision_at_k >= min_precision_at_k
+        and r.recall >= min_recall
+        and r.false_alerts_per_trial <= max_false_alerts
+    )
+    typer.echo("gate: PASS" if ok else "gate: FAIL")
+    if not ok:
         raise typer.Exit(code=1)
 
 

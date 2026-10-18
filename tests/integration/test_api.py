@@ -612,3 +612,79 @@ def test_list_stories_tool_reports_coverage_totals_and_date_filters(
     assert 0 < one["total_matching"] < total
     with pytest.raises(ToolError):
         run_tool("list_stories", {"since": "yesterday"}, ctx.onto, owner)
+
+
+def test_warehouse_export_with_database(
+    engine: Engine, run_data: Path, household: Household, tmp_path: Path
+) -> None:
+    import pyarrow.parquet as pq
+
+    from d2d.analytics import export_warehouse
+
+    taxonomy = load_categories(ROOT / "config" / "categories.toml")
+    counts = export_warehouse(run_data, tmp_path, household, taxonomy, engine)
+    stories = pq.read_table(tmp_path / "fact_story.parquet").to_pylist()
+    assert counts["fact_story"] == len(stories) > 0
+    labeled = [s for s in stories if s["category_id"]]
+    assert labeled and all(s["category_id"] in taxonomy.categories for s in labeled)
+    assert all(s["label_source"] for s in labeled)
+    answers = pq.read_table(tmp_path / "fact_agent_answer.parquet").to_pylist()
+    assert counts["fact_agent_answer"] == len(answers) > 0
+    assert all(isinstance(a["grounded"], bool) and a["latency_ms"] >= 0 for a in answers)
+    assert counts["fact_feedback"] > 0
+
+
+def test_search_stories_tool_ranks_by_meaning_within_scope(engine: Engine, run_data: Path) -> None:
+    from d2d.agent.search import HashingEmbedder, StorySearch
+    from d2d.agent.tools import ToolError, run_tool
+    from d2d.api.scope import Scope, load_roles
+
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    ctx.onto.search = StorySearch(HashingEmbedder())
+    roles = load_roles(ROOT / "config" / "roles.toml")
+    owner = Scope(roles["owner"], ctx.onto.household, ctx.onto.taxonomy)
+    guest = Scope(roles["guest"], ctx.onto.household, ctx.onto.taxonomy)
+
+    out = run_tool("search_stories", {"query": "firmware update rollout"}, ctx.onto, owner)
+    assert out["method"] == "lexical" and 0 < len(out["stories"]) <= 5
+    assert out["stories"][0]["category"] == "firmware_rollout"
+    assert out["playbooks"][0]["category"] == "firmware_rollout"
+    scores = [s["score"] for s in out["stories"]]
+    assert scores == sorted(scores, reverse=True)
+
+    visible = {s["story_id"] for s in ctx.onto.list_stories(guest, limit=100_000)}
+    found = run_tool("search_stories", {"query": "garage door", "limit": 10}, ctx.onto, guest)
+    assert {s["story_id"] for s in found["stories"]} <= visible
+    with pytest.raises(ToolError):
+        run_tool("search_stories", {"query": "  "}, ctx.onto, owner)
+
+
+def test_mcp_server_serves_scoped_ontology(engine: Engine, run_data: Path) -> None:
+    import anyio
+    from mcp.client.client import Client
+
+    from d2d.agent.search import HashingEmbedder, StorySearch
+    from d2d.api.scope import Scope, load_roles
+    from d2d.mcp_server import build_server
+
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    ctx.onto.search = StorySearch(HashingEmbedder())
+    guest = Scope(
+        load_roles(ROOT / "config" / "roles.toml")["guest"], ctx.onto.household, ctx.onto.taxonomy
+    )
+    visible = {s["story_id"] for s in ctx.onto.list_stories(guest, limit=100_000)}
+
+    async def main() -> tuple[Any, Any, Any]:
+        async with Client(build_server(ctx.onto, guest)) as client:
+            listed = await client.call_tool("list_stories", {"limit": 25})
+            found = await client.call_tool("search_stories", {"query": "garage door"})
+            hidden = await client.call_tool(
+                "get_device_history", {"device_id": "smart_plug_office"}
+            )
+            return listed, found, hidden
+
+    listed, found, hidden = anyio.run(main)
+    assert not listed.is_error and listed.structured_content["total_matching"] == len(visible)
+    assert {s["story_id"] for s in listed.structured_content["stories"]} <= visible
+    assert {s["story_id"] for s in found.structured_content["stories"]} <= visible
+    assert hidden.is_error  # a bedroom device is outside the guest's shared rooms

@@ -298,7 +298,8 @@ _ENV = Environment(undefined=StrictUndefined, autoescape=False, keep_trailing_ne
 
 
 def _local(ts: datetime, tz: str) -> str:
-    return ts.astimezone(ZoneInfo(tz)).strftime("%a %b %-d %H:%M")
+    local = ts.astimezone(ZoneInfo(tz))
+    return f"{local:%a %b} {local.day} {local:%H:%M}"
 
 
 def enrich(

@@ -36,6 +36,9 @@ jobs:
       - run: uv run d2d run --data-dir data/check
       - run: uv run d2d eval changelog --data-dir data/check
       - run: uv run d2d eval linking --data-dir data/check
+      - run: uv run d2d security scan --data-dir data/check
+      - run: uv run d2d eval security --data-dir data/check
+      - run: uv run d2d export warehouse --no-db --data-dir data/check
       - run: uv run d2d review export --no-db --data-dir data/check
       - run: uv run d2d train --training-set data/check/labels/training_set.jsonl --models-dir data/check/models
       - run: uv run d2d eval classifier --models-dir data/check/models
@@ -51,6 +54,7 @@ jobs:
           uv run d2d feedback route
           uv run d2d notify --data-dir data/check
           uv run d2d calibrate --data-dir data/check --models-dir data/check/models --out data/check/calib
+          uv run d2d export warehouse --data-dir data/check --out data/check/warehouse-db
           uv run alembic downgrade base
       - uses: actions/setup-node@v4
         with:
@@ -64,3 +68,25 @@ jobs:
           npm test
           npm run lint
           npm run build
+
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+      - name: terraform (fmt, validate, mocked tests)
+        run: |
+          terraform -chdir=infra/terraform fmt -check -recursive
+          for m in gcp aws; do
+            terraform -chdir=infra/terraform/$m init -backend=false -input=false
+            terraform -chdir=infra/terraform/$m validate
+            terraform -chdir=infra/terraform/$m test
+          done
+      - uses: astral-sh/setup-uv@v6
+      - name: ansible (syntax check)
+        run: >-
+          uvx --from ansible-core ansible-playbook -i infra/ansible/inventory.example.ini
+          infra/ansible/site.yml --syntax-check

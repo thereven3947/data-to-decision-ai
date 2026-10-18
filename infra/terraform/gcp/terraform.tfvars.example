@@ -1,0 +1,4 @@
+project_id        = "my-gcp-project"
+location          = "US"
+dataset_id        = "d2d_analytics"
+dashboard_viewers = ["user:me@example.com"]

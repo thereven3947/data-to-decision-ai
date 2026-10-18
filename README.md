@@ -121,6 +121,10 @@ Please open a private report through the repository's **Security** tab instead o
 - [Development plan](docs/development-plan.md) — environments, repo layout, CI/CD, workflow
 - [Feature roadmap](docs/feature-roadmap.md) — milestones M0–M11 and exit criteria
 - [Mac mini setup runbook](docs/mac-mini-setup.md) — M4-01 manual checklist
+- [Security analytics](docs/security-analytics.md) — unexpected / unauthorized configuration changes, red-team eval
+- [Analytics warehouse](docs/analytics-warehouse.md) — star-schema export, BigQuery views, Looker
+- [MCP server](docs/mcp.md) — the Copilot's read-only tools for Claude Desktop, VS Code and other agents
+- [Infrastructure as code](docs/infrastructure-as-code.md) — Terraform (BigQuery, off-site backups), Ansible (Mac mini)
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 
@@ -135,6 +139,13 @@ proposals and backups (M11). Remote access for invited testers (M4-04) is built 
 it goes live once the owner turns on a tunnel (Tailscale Funnel, $0). See the [roadmap](docs/feature-roadmap.md) and
 [backlog](planning/backlog.toml). Everything is toy data from the simulator; nothing connects to a
 real home or any company system.
+
+Around the loop: **configuration-integrity alerts** score every config and topology change against
+the approved baseline (OT-security view, red-team eval gated in CI); the Copilot's
+**`search_stories`** tool finds stories by meaning with `nomic-embed-text` embeddings; an **MCP
+server** exposes the same read-only, role-scoped tools to any AI client; a **warehouse export** feeds
+BigQuery and Looker dashboards; and **Terraform / Ansible** describe the cloud pieces and the Mac
+mini host, tested in CI without cloud credentials.
 
 Run it locally (macOS; Postgres in Docker, Ollama with `qwen3:14b` for the agent):
 
@@ -153,8 +164,9 @@ uv run d2d serve                       # API + agent (+ built UI) on http://127.
 (cd web && npm ci && npm run dev)      # web UI with hot reload on http://127.0.0.1:5173
 ```
 
-Useful commands: `d2d eval changelog|linking|classifier` (gates), `d2d review queue|label|case`,
-`make check` (everything CI runs). Set `D2D_AUTH=off` to skip login during local
+Useful commands: `d2d eval changelog|linking|classifier|security` (gates), `d2d review queue|label|case`,
+`d2d security scan`, `d2d export warehouse`, `d2d mcp --role guest`, `make check` (everything CI
+runs) and `make infra` (Terraform + Ansible checks). Set `D2D_AUTH=off` to skip login during local
 development (never on the Mac mini), `D2D_LLM=off` to run the agent without an LLM (grounded
 fallback answers only) or `D2D_LLM_MODEL=qwen3:8b` for faster answers.
 

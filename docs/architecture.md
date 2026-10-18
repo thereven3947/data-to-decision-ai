@@ -65,6 +65,11 @@ human decision (review queue, case) or a **calibration pull request** that a hum
 | `agent` | 11 | FastAPI, OpenAI-compatible client → Ollama (default) or Claude (optional) | Mac mini |
 | `feedback` | 12 | Postgres + router that writes labels / files issues / queues calibration | Mac mini |
 | `calibration` | loops | Nightly jobs that produce eval reports and open PRs via GitHub API | Mac mini (self-hosted runner) |
+| `security` | 3 → alerts | Baseline rules + Isolation Forest over config/topology events ([security analytics](security-analytics.md)) | Mac mini, CI (red-team eval) |
+| `agent.search` | 11 | `nomic-embed-text` embeddings via Ollama, lexical fallback (`search_stories` tool) | Mac mini |
+| `mcp_server` | 11 | MCP (stdio) over the same read-only, role-scoped tools ([MCP](mcp.md)) | Wherever an MCP client runs `d2d mcp` |
+| `analytics` | 9 → BI | Star-schema Parquet → BigQuery views → Looker ([warehouse](analytics-warehouse.md)) | Export: Mac mini · BI: Google Cloud |
+| `infra` | ops | Terraform (BigQuery, off-site S3 backups), Ansible (Mac mini host) ([IaC](infrastructure-as-code.md)) | CI checks; applied by the owner |
 
 ## Deployment topology
 
