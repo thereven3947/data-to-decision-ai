@@ -584,3 +584,31 @@ def test_guest_chat_is_rate_limited_and_owner_is_not(
     # Guest answers only cite stories the guest may see.
     visible = {s["story_id"] for s in guest.get("/api/stories").json()}
     assert set(answers[0].json()["cited_ids"]) <= visible
+
+
+def test_list_stories_tool_reports_coverage_totals_and_date_filters(
+    engine: Engine, run_data: Path
+) -> None:
+    from d2d.agent.tools import ToolError, run_tool
+    from d2d.api.scope import Scope, load_roles
+
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    owner = Scope(
+        load_roles(ROOT / "config" / "roles.toml")["owner"], ctx.onto.household, ctx.onto.taxonomy
+    )
+    total = len(ctx.onto.list_stories(owner, limit=100_000))
+    out = run_tool("list_stories", {"limit": 5}, ctx.onto, owner)
+    cov = out["data_covers"]
+    assert out["total_matching"] == total > 5 and out["returned"] == 5 == len(out["stories"])
+    assert sum(out["by_category"].values()) == total
+    assert cov["days"] >= 3 and cov["from"] < cov["to"]
+    # "past 15 days" is longer than the data: everything matches, and the coverage says so.
+    longer = run_tool("list_stories", {"last_days": 15}, ctx.onto, owner)
+    assert longer["total_matching"] == total and "only has data" in longer["coverage_note"]
+    assert "coverage_note" not in out
+    last_day = run_tool("list_stories", {"last_days": 1}, ctx.onto, owner)
+    assert 0 < last_day["total_matching"] < total and last_day["filter"]["since"] == cov["to"]
+    one = run_tool("list_stories", {"since": cov["from"], "until": cov["from"]}, ctx.onto, owner)
+    assert 0 < one["total_matching"] < total
+    with pytest.raises(ToolError):
+        run_tool("list_stories", {"since": "yesterday"}, ctx.onto, owner)

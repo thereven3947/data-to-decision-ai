@@ -68,3 +68,28 @@ def test_checker_rejects_unknown_story_hidden_device_relabel_and_numbers() -> No
     assert not _check(f"This was fault_degradation [story:{A}].").ok
     r = _check(f"It saves 9.9 kWh [story:{A}].")
     assert not r.ok and "9.9 kWh" in r.errors[0]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("what changed in the past 15 days. I need 15 days", {"last_days": 15}),
+        ("What changed in the last day?", {"last_days": 1}),
+        ("anything this week?", {"last_days": 7}),
+        ("past two weeks", {"last_days": 14}),
+        (
+            "How many changes were there on October 2?",
+            {"since": "2026-10-02", "until": "2026-10-02"},
+        ),
+        ("between Oct 1 and Oct 2", {"since": "2026-10-01", "until": "2026-10-02"}),
+        ("since 2026-10-03", {"since": "2026-10-03"}),
+        ("on 10/2", {"since": "2026-10-02", "until": "2026-10-02"}),
+        ("Why did the dishwasher run at 2 a.m.?", None),
+        ("Brief me", None),
+    ],
+)
+def test_time_filter(question: str, expected: dict[str, object] | None) -> None:
+    from d2d.agent.timefilter import parse_time_filter
+
+    f = parse_time_filter(question)
+    assert (f.args(2026) if f else None) == expected

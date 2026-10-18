@@ -11,6 +11,7 @@ from typing import Any
 from d2d.agent.checker import CheckResult, check_answer
 from d2d.agent.provider import Provider, ProviderError, ToolCall
 from d2d.agent.skills import Skill, SkillSet
+from d2d.agent.timefilter import parse_time_filter
 from d2d.agent.tools import TOOL_NAMES, TOOL_SPECS, ToolError, run_tool
 from d2d.api.repo import Ontology
 from d2d.api.scope import Scope
@@ -49,6 +50,12 @@ Rules:
 - Times in tool results are already in the home's local time; copy them as given.
 - If the data does not answer the question, say so and point to the review queue.
 - Answer the user's latest message. Earlier turns are context only; never repeat an earlier answer.
+- Time ranges: the household data is a simulation covering only `data_covers` (from list_stories);
+  "the past N days" counts back from `as_of`. Use list_stories with last_days / since / until. If
+  the user asks about a longer period than the data covers, say what period the data covers.
+- Counts: use `total_matching` and `by_category`; `limit` only caps how many stories are listed, so
+  never present the number of listed stories as a total or as a number of days.
+- Broad questions: give counts by category and name at most 8 stories (the most important ones).
 - Answer in under 180 words, Markdown allowed, no tables.
 
 Audience: {role}. {tone}
@@ -109,6 +116,10 @@ class Agent:
             result = {"error": str(exc)}
         return json.dumps(result, default=str, separators=(",", ":"))
 
+    def _data_year(self, scope: Scope) -> int:
+        stories = self.onto.list_stories(scope, limit=1)
+        return stories[0]["window_end"].year if stories else time.gmtime().tm_year
+
     def _model_name(self) -> str:
         tag = self.provider.model_tag if self.provider else "no model"
         return tag.split(":", 1)[1] if tag.startswith("ollama:") else tag
@@ -148,6 +159,12 @@ class Agent:
             messages += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
         messages.append({"role": "user", "content": question})
         prefetch_calls = [ToolCall(p["tool"], dict(p.get("args", {}))) for p in skill.prefetch]
+        window = parse_time_filter(question) if skill.name != "about" else None
+        if window is not None:
+            # Deterministic period filter: counts for a time range come from the data, not the LLM.
+            year = self._data_year(scope)
+            filtered = ToolCall("list_stories", {**window.args(year), "limit": 25})
+            prefetch_calls = [c for c in prefetch_calls if c.name != "list_stories"] + [filtered]
         if prefetch_calls:
             messages.append(
                 {

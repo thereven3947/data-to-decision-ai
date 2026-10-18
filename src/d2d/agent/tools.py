@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections import Counter
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -26,12 +27,24 @@ def _fn(name: str, description: str, props: dict[str, Any], required: list[str])
 TOOL_SPECS = [
     _fn(
         "list_stories",
-        "List change stories (newest first). Filters are optional.",
+        "List change stories (newest first) with the total count, counts per category and the "
+        "period the data covers. Filters are optional; time filters use the home's local dates.",
         {
             "status": {**_STR, "enum": ["new", "needs_review", "published", "closed"]},
             "category": {**_STR, "description": "Category id, e.g. load_shift"},
             "device_id": {**_STR, "description": "Device id, e.g. washer"},
-            "limit": {"type": "integer", "description": "Max stories (default 10)"},
+            "last_days": {
+                "type": "integer",
+                "description": "Only stories in the last N days, counted back from as_of "
+                "(the end of the data), e.g. 7 for 'the past week'",
+            },
+            "since": {**_STR, "description": "Only stories on or after this date, YYYY-MM-DD"},
+            "until": {**_STR, "description": "Only stories on or before this date, YYYY-MM-DD"},
+            "limit": {
+                "type": "integer",
+                "description": "Max stories to list (default 10, max 25). Counts always cover "
+                "all matching stories.",
+            },
         },
         [],
     ),
@@ -104,18 +117,85 @@ class ToolError(ValueError):
     pass
 
 
+def _date(value: Any, field: str) -> date | None:
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError as exc:
+        raise ToolError(f"{field} must be a date like 2026-10-01") from exc
+
+
+def _list_stories(args: dict[str, Any], onto: Ontology, scope: Scope, tz: str) -> dict[str, Any]:
+    zone = ZoneInfo(tz)
+    limit = max(1, min(int(args.get("limit") or 10), 25))
+    visible = onto.list_stories(scope, limit=100_000)
+    if not visible:
+        return {"total_matching": 0, "stories": [], "data_covers": None}
+
+    def local(s: dict[str, Any], key: str) -> date:
+        ts: datetime = s[key]
+        return ts.astimezone(zone).date()
+
+    first = min(local(s, "window_start") for s in visible)
+    last = max(local(s, "window_end") for s in visible)
+    as_of = max(s["window_end"] for s in visible)
+    since, until = _date(args.get("since"), "since"), _date(args.get("until"), "until")
+    if args.get("last_days") not in (None, ""):
+        days = max(1, int(args["last_days"]))
+        since = max(since or date.min, last - timedelta(days=days - 1))
+    matching = [
+        s
+        for s in visible
+        if (not args.get("status") or s["status"] == args["status"])
+        and (not args.get("category") or s["category"] == args["category"])
+        and (not args.get("device_id") or args["device_id"] in s["device_ids"])
+        and (since is None or local(s, "window_end") >= since)
+        and (until is None or local(s, "window_start") <= until)
+    ]
+    covered_days = (last - first).days + 1
+    asked_days = int(args["last_days"]) if args.get("last_days") not in (None, "") else None
+    exceeds = (asked_days is not None and asked_days > covered_days) or (
+        since is not None and since < first
+    )
+    note = (
+        f"The requested period is longer than the data: the simulated household only has data "
+        f"from {first.isoformat()} to {last.isoformat()} ({covered_days} days). Say this first, "
+        f"then report the {len(matching)} matching stories."
+        if exceeds
+        else None
+    )
+    return {
+        **({"coverage_note": note} if note else {}),
+        "data_covers": {
+            "from": first.isoformat(),
+            "to": last.isoformat(),
+            "days": covered_days,
+            "note": "simulated household data; this is the whole period available",
+        },
+        "as_of": _ts(as_of, tz),
+        "filter": {
+            k: v
+            for k, v in {
+                "since": since.isoformat() if since else None,
+                "until": until.isoformat() if until else None,
+                "status": args.get("status"),
+                "category": args.get("category"),
+                "device_id": args.get("device_id"),
+            }.items()
+            if v
+        },
+        "total_matching": len(matching),
+        "by_category": dict(Counter(s["category"] or "unlabeled" for s in matching)),
+        "returned": min(limit, len(matching)),
+        "stories": [_story_brief(s, tz) for s in matching[:limit]],
+    }
+
+
 def run_tool(name: str, args: dict[str, Any], onto: Ontology, scope: Scope) -> dict[str, Any]:
     tz = onto.household.timezone
     if name == "list_stories":
-        limit = max(1, min(int(args.get("limit") or 10), 25))
-        stories = onto.list_stories(
-            scope,
-            status=args.get("status") or None,
-            category=args.get("category") or None,
-            device_id=args.get("device_id") or None,
-            limit=limit,
-        )
-        return {"stories": [_story_brief(s, tz) for s in stories]}
+        return _list_stories(args, onto, scope, tz)
     if name == "get_story":
         story = onto.get_story(scope, str(args.get("story_id", "")))
         if story is None:

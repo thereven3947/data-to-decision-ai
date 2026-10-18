@@ -27,7 +27,7 @@ which keeps it cheap, auditable and replaceable.
 
 | Tool | Returns |
 |------|---------|
-| `list_stories(filters)` | Story summaries (id, category, confidence, devices, window, status) |
+| `list_stories(filters)` | Story summaries plus `total_matching`, `by_category` and `data_covers`; filters: status, category, device, `last_days`, `since`, `until` |
 | `get_story(story_id)` | Story + linked events + enrichment + label provenance |
 | `get_device_history(device_id, since)` | Recent events and stories for a device |
 | `get_category_playbook(category)` | Definition, plain-language glossary, checks, recommended actions |
@@ -68,6 +68,14 @@ fails the grounding checker), or **📼 Recorded AI answer** (replayed in the st
 Audience adaptation uses `glossary.toml`, for example `load_shift` →
 *"the dishwasher's schedule was moved to cheaper overnight hours"* for `family`, and
 *"2.1 kWh moved from peak to off-peak, est. $0.38/day saved"* for `energy_advisor`.
+
+## Time ranges
+
+Questions with a period ("past 15 days", "last week", "on October 2", "between Oct 1 and Oct 2")
+are parsed deterministically (`d2d.agent.timefilter`) and the matching `list_stories` filter is
+prefetched, so counts for a period come from the database, not from the model. "Past N days"
+counts back from the end of the data; if the period is longer than the data covers, the tool
+returns a `coverage_note` and the Copilot says which period the simulated data covers.
 
 ## Intent routing
 
