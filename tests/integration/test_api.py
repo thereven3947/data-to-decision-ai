@@ -632,3 +632,28 @@ def test_warehouse_export_with_database(
     assert counts["fact_agent_answer"] == len(answers) > 0
     assert all(isinstance(a["grounded"], bool) and a["latency_ms"] >= 0 for a in answers)
     assert counts["fact_feedback"] > 0
+
+
+def test_search_stories_tool_ranks_by_meaning_within_scope(engine: Engine, run_data: Path) -> None:
+    from d2d.agent.search import HashingEmbedder, StorySearch
+    from d2d.agent.tools import ToolError, run_tool
+    from d2d.api.scope import Scope, load_roles
+
+    ctx = build_context(engine, ROOT / "config", run_data, ROOT / "agent" / "skills", None)
+    ctx.onto.search = StorySearch(HashingEmbedder())
+    roles = load_roles(ROOT / "config" / "roles.toml")
+    owner = Scope(roles["owner"], ctx.onto.household, ctx.onto.taxonomy)
+    guest = Scope(roles["guest"], ctx.onto.household, ctx.onto.taxonomy)
+
+    out = run_tool("search_stories", {"query": "firmware update rollout"}, ctx.onto, owner)
+    assert out["method"] == "lexical" and 0 < len(out["stories"]) <= 5
+    assert out["stories"][0]["category"] == "firmware_rollout"
+    assert out["playbooks"][0]["category"] == "firmware_rollout"
+    scores = [s["score"] for s in out["stories"]]
+    assert scores == sorted(scores, reverse=True)
+
+    visible = {s["story_id"] for s in ctx.onto.list_stories(guest, limit=100_000)}
+    found = run_tool("search_stories", {"query": "garage door", "limit": 10}, ctx.onto, guest)
+    assert {s["story_id"] for s in found["stories"]} <= visible
+    with pytest.raises(ToolError):
+        run_tool("search_stories", {"query": "  "}, ctx.onto, owner)

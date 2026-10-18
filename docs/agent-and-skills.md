@@ -19,8 +19,10 @@ which keeps it cheap, auditable and replaceable.
   - Default: **Ollama on the Mac mini**, `qwen3:14b` (32 GB unified memory). Fallback `qwen3:8b` for speed.
   - Optional: Claude (Anthropic API, own key, monthly spend cap) for comparison runs and as an eval judge.
 - **Context strategy:** label-grounded retrieval. Tools return compact, structured JSON filtered by
-  category / device / time / case — no vector search needed for core questions. A small embedding index
-  (`nomic-embed-text`) over playbooks and case notes is an optional later add-on.
+  category / device / time / case — no vector search needed for core questions. For questions that
+  name none of those, `search_stories` ranks stories and category playbooks by meaning with
+  `nomic-embed-text` embeddings (`[embeddings]` in `config/llm.toml`), cached per text and limited to
+  the caller's scope; if Ollama is unreachable it falls back to lexical matching and reports it.
 - **Tool loop:** max 6 tool calls per turn, 8k-token context budget, streaming responses (SSE).
 
 ## Read-only tools
@@ -33,6 +35,7 @@ which keeps it cheap, auditable and replaceable.
 | `get_category_playbook(category)` | Definition, plain-language glossary, checks, recommended actions |
 | `get_case(case_id)` | Case, linked stories, action items and their status |
 | `get_kpis(period)` | Time-to-detect / diagnose / action, abstain rate, precision |
+| `search_stories(query, limit)` | Stories and category playbooks closest in meaning to a free-text query, each with a 0–1 score and the method used (embedding or lexical fallback) |
 | `get_feedback_summary(target)` | Prior corrections and complaints for a story or skill |
 
 All tools run under the caller's permission scope (see [domain model](domain-model.md#roles-and-permissions-stage-10)).

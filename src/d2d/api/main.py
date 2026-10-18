@@ -18,6 +18,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from d2d import __version__
 from d2d.agent.provider import OllamaProvider, Provider, load_llm
 from d2d.agent.runtime import Agent
+from d2d.agent.search import StorySearch, embedder_from_config, load_embeddings
 from d2d.agent.skills import load_skills
 from d2d.api.guard import ChatGuard, ChatLimits, GuardRefused, load_limits
 from d2d.api.insights import insights
@@ -62,7 +63,8 @@ def build_context(
     household = load_household(cfg_dir / "household.toml")
     taxonomy = load_categories(cfg_dir / "categories.toml")
     enrichment = load_enrichment(cfg_dir / "enrichment.toml", cfg_dir / "semantics.toml")
-    onto = Ontology(engine, household, taxonomy, enrichment, data_dir)
+    search = StorySearch(embedder_from_config(load_embeddings(cfg_dir / "llm.toml")))
+    onto = Ontology(engine, household, taxonomy, enrichment, data_dir, search)
     max_calls = load_llm(cfg_dir / "llm.toml").max_tool_calls
     agent = Agent(onto, provider, load_skills(skills_dir), max_calls)
     policy = accounts or load_account_policy(cfg_dir / "roles.toml")

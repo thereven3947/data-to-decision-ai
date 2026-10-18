@@ -12,6 +12,7 @@ import duckdb
 import pyarrow.parquet as pq
 from sqlalchemy import Engine, select
 
+from d2d.agent.search import StorySearch
 from d2d.api.scope import Scope
 from d2d.config import Household, Taxonomy
 from d2d.db import (
@@ -69,6 +70,7 @@ class Ontology:
     taxonomy: Taxonomy
     enrichment: EnrichmentConfig
     data_dir: Path
+    search: StorySearch | None = None  # semantic search for the search_stories tool
 
     # --- stories ---------------------------------------------------------------------------
     def _stories(self) -> list[dict[str, Any]]:
