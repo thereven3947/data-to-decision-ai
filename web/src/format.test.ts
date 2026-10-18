@@ -26,3 +26,19 @@ describe('format', () => {
     expect(linkCitations('[story:0123456789abcdef]')).toBe('[story 012345](/stories/0123456789abcdef)')
   })
 })
+
+import { answerSource } from './answerSource'
+
+describe('answer source label', () => {
+  it('names who produced the answer', () => {
+    expect(answerSource({ llm_model_tag: 'ollama:qwen3:14b', skill: 'general' }, false).label).toBe(
+      '🤖 Live AI answer · qwen3:14b on the Mac mini',
+    )
+    expect(answerSource({ llm_model_tag: 'ollama:qwen3:14b+fallback', skill: 'general' }, false).kind).toBe('summary')
+    expect(answerSource({ llm_model_tag: 'fallback', skill: 'general' }, false).kind).toBe('summary')
+    expect(answerSource({ llm_model_tag: 'ollama:qwen3:14b', skill: 'why_question' }, true).label).toBe(
+      '📼 Recorded AI answer · qwen3:14b',
+    )
+    expect(answerSource({ llm_model_tag: 'static demo', skill: 'demo' }, true).kind).toBe('demo')
+  })
+})

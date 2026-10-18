@@ -4,6 +4,7 @@ import Markdown from 'react-markdown'
 import { Link } from 'react-router-dom'
 import { api, ApiError, IS_DEMO, LIVE_URL, post, type ChatAnswer, type Health, type Meta } from '../api'
 import { FeedbackButtons } from '../components/Feedback'
+import { answerSource } from '../answerSource'
 import { linkCitations } from '../format'
 
 const SUGGESTIONS = [
@@ -125,6 +126,7 @@ export default function Ask() {
 
 function Answer({ a }: { a: ChatAnswer }) {
   const md = linkCitations(a.answer, a.citations)
+  const source = answerSource(a, IS_DEMO)
   return (
     <div className="bubble assistant">
       <Markdown
@@ -136,14 +138,17 @@ function Answer({ a }: { a: ChatAnswer }) {
         {md}
       </Markdown>
       <div className="answer-meta">
-        <span className={`badge ${a.checker.ok ? 'badge-published' : 'badge-needs_review'}`}>
-          {a.checker.ok ? 'grounded ✓' : 'fallback'}
-        </span>
+        <span className={`source source-${source.kind}`} title={source.detail}>{source.label}</span>
+        {source.kind !== 'demo' && (
+          <span className={`badge ${a.checker.ok ? 'badge-published' : 'badge-needs_review'}`}>
+            {a.checker.ok ? 'fact-checked ✓' : 'not checked'}
+          </span>
+        )}
         <span className="muted small">
-          skill {a.skill} · {a.llm_model_tag} · {(a.latency_ms / 1000).toFixed(1)} s · tools{' '}
-          {a.tool_calls.map((t) => t.name).join(', ') || '—'}
+          {(a.latency_ms / 1000).toFixed(1)} s · skill {a.skill} · data looked up: {a.tool_calls.map((t) => t.name).join(', ') || 'none'}
         </span>
       </div>
+      <p className="muted small source-detail">{source.detail}</p>
       {!a.checker.ok && a.checker.errors.length > 0 && (
         <details className="small"><summary>Why fallback?</summary><ul>{a.checker.errors.map((e) => <li key={e}>{e}</li>)}</ul></details>
       )}

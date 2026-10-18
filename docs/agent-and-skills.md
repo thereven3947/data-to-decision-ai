@@ -59,6 +59,11 @@ agent/skills/
 | `device_history` | "What's been going on with the washer?" | Timeline narrative with story citations |
 | `why_question` | "Why did the dishwasher run at 2 a.m.?" | Causal explanation grounded in linked events + category playbook |
 | `action_items` | "What should I do?" | Proposed items, each tied to a playbook step and story IDs, status `proposed` |
+| `about` | "Are you a robot?", "Who are you?" | Honest description of the Copilot: an AI agent on a local model, read-only tools, fact-checked |
+
+Every answer in the UI is labeled with its source: **🤖 Live AI answer** (written by the local
+model), **📋 Data summary, no AI** (templated fallback when the model is unavailable or its answer
+fails the grounding checker), or **📼 Recorded AI answer** (replayed in the static demo).
 
 Audience adaptation uses `glossary.toml`, for example `load_shift` →
 *"the dishwasher's schedule was moved to cheaper overnight hours"* for `family`, and

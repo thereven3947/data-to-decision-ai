@@ -197,3 +197,9 @@ button.link:hover { border-color: #cfd6e6; }
 .live-cta .button { text-align: center; font-weight: 600; }
 .live-cta small { color: #8c97b0; }
 .bubble.assistant.limited { background: #fff8e6; border-color: #f6d58b; }
+.source { font-size: 0.78rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.source-ai { background: #e8eeff; color: var(--accent); }
+.source-recorded { background: #f3e8ff; color: #6b46c1; }
+.source-summary { background: #fff1db; color: var(--warn); }
+.source-demo { background: #edf0f5; color: #3d4659; }
+.source-detail { margin: 0.25rem 0 0; }

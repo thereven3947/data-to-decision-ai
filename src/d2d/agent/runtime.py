@@ -37,7 +37,8 @@ def normalize_citations(text: str) -> str:
 
 
 SYSTEM = """You are the D2D household Copilot for a simulated smart home (toy data, no real
-devices). You are a read-only explainer.
+devices). You are a read-only explainer, a language model ({model}) running locally on the owner's
+Mac mini.
 
 Rules:
 - Use only facts from tool results. Never invent stories, devices, numbers or times.
@@ -47,6 +48,7 @@ Rules:
   bracket, e.g. [story:aaaa] [story:bbbb]. Never mention tool names.
 - Times in tool results are already in the home's local time; copy them as given.
 - If the data does not answer the question, say so and point to the review queue.
+- Answer the user's latest message. Earlier turns are context only; never repeat an earlier answer.
 - Answer in under 180 words, Markdown allowed, no tables.
 
 Audience: {role}. {tone}
@@ -107,6 +109,10 @@ class Agent:
             result = {"error": str(exc)}
         return json.dumps(result, default=str, separators=(",", ":"))
 
+    def _model_name(self) -> str:
+        tag = self.provider.model_tag if self.provider else "no model"
+        return tag.split(":", 1)[1] if tag.startswith("ollama:") else tag
+
     def _check(self, answer: str, outputs: list[Any], scope: Scope) -> CheckResult:
         visible = self.onto.list_stories(scope, limit=100_000)
         hidden = set(self.onto.household.devices) - scope.devices
@@ -133,7 +139,8 @@ class Agent:
                     role=scope.role,
                     tone=self.skills.tones.get(scope.role, ""),
                     skill=skill.name,
-                    instructions=skill.instructions,
+                    instructions=skill.instructions.replace("{model}", self._model_name()),
+                    model=self._model_name(),
                 ),
             }
         ]
@@ -243,6 +250,12 @@ class Agent:
                 stories.setdefault(s["story_id"], s)
             if "story_id" in out and "title" in out:
                 stories.setdefault(out["story_id"], out)
+        if skill.name == "about":
+            return (
+                "I'm the D2D Copilot. Right now the local language model is unavailable, so this "
+                "reply is a fixed message rather than a generated answer. Normally a model running "
+                "on the owner's Mac mini answers from the household's change data, read-only."
+            )
         lines = []
         if errors:
             lines.append("_The assistant could not produce a checked answer, so here is the data._")

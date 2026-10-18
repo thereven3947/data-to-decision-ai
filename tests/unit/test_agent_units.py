@@ -23,6 +23,10 @@ A, B = "aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"
         ("What's been going on with the garage door?", "device_history"),
         ("What's new?", "household_briefing"),
         ("hello there", "general"),
+        ("q2 are you robot", "about"),
+        ("seems like you are not agent based answering machine", "about"),
+        ("Who are you?", "about"),
+        ("Which devices had data problems?", "general"),
     ],
 )
 def test_router(question: str, skill: str) -> None:

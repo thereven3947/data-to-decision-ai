@@ -1,0 +1,12 @@
+intent = "Questions about the Copilot itself (who or what is answering)"
+priority = 1
+patterns = [
+  '\b(are|r) (you|u) (a |an )?(robot|bot|ai|human|person|agent|llm|model|real|machine)',
+  '\bwho (are|r) (you|u)\b',
+  '\bwhat (are|r) (you|u)\b',
+  '\bhow do (you|u) work',
+  '\bnot (an? )?(ai|agent|llm|real)',
+  '\b(is|are) (this|these|it|the answers?) (an? )?(ai|llm|agent|generated|scripted|real)',
+  '\bwhich (model|llm)\b',
+]
+prefetch = []
