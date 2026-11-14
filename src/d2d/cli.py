@@ -34,6 +34,22 @@ from d2d.db import LoadError, load_run
 from d2d.db import database_url as default_url
 from d2d.enrichment import load_enrichment
 from d2d.evaluation import evaluate_changelog, evaluate_linking
+from d2d.experiment.analyze import aa_simulator, decide, power_table
+from d2d.experiment.analyze import analyze as analyze_experiment
+from d2d.experiment.report import run_report, write_report
+from d2d.experiment.simulate import (
+    DESIGNS,
+    CaseTemplate,
+    ExperimentConfig,
+    load_experiment,
+    load_severity,
+    read_simulation,
+    templates_from_config,
+    templates_from_stories,
+    write_simulation,
+)
+from d2d.experiment.simulate import simulate as simulate_experiment
+from d2d.experiment.stats import aa_peeking
 from d2d.feedback import route_feedback
 from d2d.hitl.review import (
     ReviewError,
@@ -82,6 +98,11 @@ user_app = typer.Typer(
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
 )
 app.add_typer(user_app, name="user")
+experiment_app = typer.Typer(
+    no_args_is_help=True,
+    help="A/B test of suggested actions in the review flow (simulated data only).",
+)
+app.add_typer(experiment_app, name="experiment")
 
 DataDir = Annotated[Path, typer.Option(help="Data directory (gitignored).")]
 ConfigDir = Annotated[Path | None, typer.Option(help="Config directory (default ./config).")]
@@ -730,6 +751,173 @@ def eval_security(
     typer.echo("gate: PASS" if ok else "gate: FAIL")
     if not ok:
         raise typer.Exit(code=1)
+
+
+ExpSeed = Annotated[int | None, typer.Option(help="Seed (default: config/experiment.toml).")]
+
+
+def _experiment_inputs(
+    config: Path | None, data_dir: Path
+) -> tuple[ExperimentConfig, list[CaseTemplate], str]:
+    cfg_dir = config_dir(config)
+    cfg = load_experiment(cfg_dir / "experiment.toml")
+    household = load_household(cfg_dir / "household.toml")
+    severity, default = load_severity(cfg_dir / "notifications.toml")
+    if (data_dir / "stories" / "stories.parquet").is_file():
+        return cfg, templates_from_stories(data_dir, household, severity, default), "stories"
+    taxonomy = load_categories(cfg_dir / "categories.toml")
+    return cfg, templates_from_config(household, taxonomy, severity, default), "config"
+
+
+@experiment_app.command("simulate")
+def experiment_simulate(
+    design: Annotated[str, typer.Option(help="reviewer, case or observational.")] = "reviewer",
+    out: Annotated[
+        Path | None, typer.Option(help="Output dir (default data/experiment/<design>).")
+    ] = None,
+    seed: ExpSeed = None,
+    srm_bug: Annotated[bool, typer.Option(help="Inject the sample-ratio-mismatch bug.")] = False,
+    novelty: Annotated[float | None, typer.Option(help="Override novelty boost.")] = None,
+    spillover: Annotated[
+        float | None, typer.Option(help="Override spillover (case design).")
+    ] = None,
+    effect_scale: Annotated[float, typer.Option(help="0 = A/A test.")] = 1.0,
+    data_dir: Annotated[
+        Path, typer.Option(help="Pipeline output with stories (falls back to config templates).")
+    ] = Path("data"),
+    config: ConfigDir = None,
+) -> None:
+    """Simulate one experiment with a known ground-truth effect (cases.parquet + truth.json)."""
+    if design not in DESIGNS:
+        raise typer.BadParameter(f"design must be one of {', '.join(DESIGNS)}")
+    cfg, templates, source = _experiment_inputs(config, data_dir)
+    sim = simulate_experiment(
+        cfg,
+        templates,
+        design,
+        seed=seed,
+        effect_scale=effect_scale,
+        novelty=novelty,
+        spillover=spillover,
+        srm_bug=srm_bug,
+    )
+    path = write_simulation(sim, out or Path("data/experiment") / design)
+    t = sim.truth
+    dropped = f", SRM bug dropped {t['srm_dropped_cases']} cases" if srm_bug else ""
+    typer.echo(
+        f"{t['cases']} cases, {t['reviewers']} reviewers, {t['days']} days ({design}, seed "
+        f"{t['seed']}, {len(templates)} templates from {source}) -> {path}\n"
+        f"truth: long-run ATE {t['ate_long_run']:+.4f}, in-window ATE {t['ate_in_window']:+.4f}"
+        f"{dropped}\n[{t['label']}]"
+    )
+
+
+@experiment_app.command("power")
+def experiment_power(
+    seed: ExpSeed = None,
+    alpha: Annotated[float, typer.Option(help="Two-sided alpha.")] = 0.05,
+    power: Annotated[float, typer.Option(help="Target power.")] = 0.8,
+    reviewers: Annotated[int | None, typer.Option(help="Reviewers (traffic).")] = None,
+    days: Annotated[int | None, typer.Option(help="Experiment length in days.")] = None,
+    data_dir: Annotated[Path, typer.Option(help="Pipeline output with stories.")] = Path("data"),
+    config: ConfigDir = None,
+) -> None:
+    """Minimum detectable effect for case vs reviewer randomization, with and without CUPED."""
+    cfg, templates, _ = _experiment_inputs(config, data_dir)
+    s = cfg.seed if seed is None else seed
+    pre = simulate_experiment(
+        cfg, templates, "reviewer", seed=s + 1000, reviewers=reviewers, days=days, effect_scale=0.0
+    ).cases
+    r = power_table(pre, reviewers or cfg.reviewers, len(pre), alpha, power)
+    typer.echo(
+        f"baseline {r['baseline_conversion']:.3f}  ICC {r['icc']:.3f} "
+        f"(CUPED {r['icc_after_cuped']:.3f})  CUPED R2 {r['cuped_r2_case_level']:.3f}  "
+        f"{r['cases_per_reviewer']:.0f} cases/reviewer"
+    )
+    for row in r["rows"]:
+        typer.echo(
+            f"{row['design']:<9} cuped={'yes' if row['cuped'] else 'no ':<3}  "
+            f"n/arm {row['n_per_arm']:>6}  deff {row['deff']:5.2f}  "
+            f"MDE {100 * row['mde']:.2f} pp ({100 * row['relative_mde']:.1f} %)"
+        )
+
+
+@experiment_app.command("analyze")
+def experiment_analyze(
+    run_dir: Annotated[
+        Path, typer.Option("--in", help="Dir from `d2d experiment simulate`.")
+    ] = Path("data/experiment/reviewer"),
+) -> None:
+    """Pre-registered analysis: SRM, effects, CUPED, Holm/BH, novelty, sequential, decision."""
+    sim = read_simulation(run_dir)
+    design = sim.truth["design"]
+    r = analyze_experiment(sim, design)
+    (run_dir / "analysis.json").write_text(json.dumps(r, indent=2, default=float) + "\n", "utf-8")
+    srm = r["srm"]
+    typer.echo(
+        f"{r['cases']} cases, design={design}  SRM p={srm['cases']['p_value']:.3g}"
+        f"{'  ** SRM FLAGGED **' if srm['flagged'] else ''}"
+    )
+    for name, d in [("conversion_cuped", r["conversion_cuped"]), *r["effects"].items()]:
+        typer.echo(
+            f"{name:<18}{d['estimate']:+.4f}  95% CI [{d['ci_low']:+.4f}, {d['ci_high']:+.4f}]"
+            f"  p={d['p_value']:.3g}  ({d['se_method']})"
+        )
+    typer.echo(f"CUPED variance reduction {100 * r['cuped_variance_reduction']:.1f} %")
+    typer.echo(f"Holm p {', '.join(f'{p:.3g}' for p in r['multiple_testing']['holm'])}")
+    decision, reasons = decide(r)
+    typer.echo(f"decision: {decision}")
+    for reason in reasons:
+        typer.echo(f"  - {reason}")
+    typer.echo(f"truth: long-run ATE {sim.truth['ate_long_run']:+.4f} [{sim.truth['label']}]")
+
+
+@experiment_app.command("aa-test")
+def experiment_aa_test(
+    sims: Annotated[int, typer.Option(help="Simulator A/A runs.")] = 200,
+    peeking_sims: Annotated[int, typer.Option(help="Peeking A/A runs.")] = 4000,
+    looks: Annotated[int, typer.Option(help="Interim looks.")] = 10,
+    seed: ExpSeed = None,
+    data_dir: Annotated[Path, typer.Option(help="Pipeline output with stories.")] = Path("data"),
+    config: ConfigDir = None,
+) -> None:
+    """A/A tests: peeking vs O'Brien-Fleming, and iid vs cluster-robust SEs on the simulator."""
+    cfg, templates, _ = _experiment_inputs(config, data_dir)
+    s = cfg.seed if seed is None else seed
+    pk = aa_peeking(sims=peeking_sims, looks=looks, seed=s)
+    typer.echo(
+        f"peeking ({pk.sims} A/A, {pk.looks} looks): fixed horizon {pk.fpr_fixed_horizon:.3f}, "
+        f"naive peeking {pk.fpr_naive_peeking:.3f}, O'Brien-Fleming {pk.fpr_obrien_fleming:.3f}"
+    )
+    aa = aa_simulator(cfg, templates, sims=sims, seed=s + 5000)
+    for k, v in aa["false_positive_rate"].items():
+        typer.echo(
+            f"simulator A/A {k:<24}{v:.3f}  (alpha {aa['alpha']}, MC SE {aa['monte_carlo_se']:.3f})"
+        )
+
+
+@experiment_app.command("report")
+def experiment_report(
+    out: Annotated[Path, typer.Option(help="results.json + results.md.")] = Path("docs/experiment"),
+    plots: Annotated[Path | None, typer.Option(help="Plot dir (needs matplotlib).")] = Path(
+        "docs/images/experiment"
+    ),
+    hte: Annotated[bool, typer.Option(help="Causal forest + forest ATE (needs econml).")] = True,
+    aa_sims: Annotated[int, typer.Option(help="Simulator A/A runs.")] = 300,
+    seed: ExpSeed = None,
+    data_dir: Annotated[Path, typer.Option(help="Pipeline output with stories.")] = Path("data"),
+    config: ConfigDir = None,
+) -> None:
+    """Run the full pre-registered analysis; write results + plots (needs --group experiment)."""
+    cfg, templates, source = _experiment_inputs(config, data_dir)
+    r = run_report(cfg, templates, aa_sims=aa_sims, with_hte=hte, seed=seed)
+    paths = write_report(r, out, plots)
+    typer.echo(
+        f"decision: {r['decision']['decision']}  ({len(templates)} templates from {source}, "
+        f"{r['runtime_seconds']:.0f} s)"
+    )
+    for p in paths:
+        typer.echo(f"-> {p}")
 
 
 if __name__ == "__main__":
