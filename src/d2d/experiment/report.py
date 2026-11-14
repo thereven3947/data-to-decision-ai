@@ -40,7 +40,7 @@ def run_report(
         "label": DATA_LABEL,
         "seed": seed,
         "templates": len(templates),
-        "power": power_table(pre, cfg.reviewers, len(reviewer.cases)),
+        "power": power_table(pre, cfg.reviewers, len(pre)),
         "reviewer_design": primary,
         "decision": {"decision": decision, "reasons": reasons},
         "case_design": analyze(case, "case", plan),
