@@ -125,6 +125,7 @@ Please open a private report through the repository's **Security** tab instead o
 - [Analytics warehouse](docs/analytics-warehouse.md) — star-schema export, BigQuery views, Looker
 - [MCP server](docs/mcp.md) — the Copilot's read-only tools for Claude Desktop, VS Code and other agents
 - [Infrastructure as code](docs/infrastructure-as-code.md) — Terraform (BigQuery, off-site backups), Ansible (Mac mini)
+- [Experimentation](docs/experimentation.md) — A/B test and causal inference on simulated review data ([pre-registration](docs/experiment-preregistration.md), [decision memo](docs/experiment-decision-memo.md))
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 
@@ -145,7 +146,10 @@ the approved baseline (OT-security view, red-team eval gated in CI); the Copilot
 **`search_stories`** tool finds stories by meaning with `nomic-embed-text` embeddings; an **MCP
 server** exposes the same read-only, role-scoped tools to any AI client; a **warehouse export** feeds
 BigQuery and Looker dashboards; and **Terraform / Ansible** describe the cloud pieces and the Mac
-mini host, tested in CI without cloud credentials.
+mini host, tested in CI without cloud credentials. An **A/B testing and causal-inference module**
+(`d2d experiment`) runs a pre-registered, reviewer-randomized experiment on simulated review data
+(power/MDE, SRM, cluster-robust CUPED, Holm/BH, O'Brien-Fleming, causal forests scored against the
+simulator's ground truth, and an observational confounding demo).
 
 Run it locally (macOS; Postgres in Docker, Ollama with `qwen3:14b` for the agent):
 
@@ -165,7 +169,9 @@ uv run d2d serve                       # API + agent (+ built UI) on http://127.
 ```
 
 Useful commands: `d2d eval changelog|linking|classifier|security` (gates), `d2d review queue|label|case`,
-`d2d security scan`, `d2d export warehouse`, `d2d mcp --role guest`, `make check` (everything CI
+`d2d security scan`, `d2d export warehouse`, `d2d mcp --role guest`,
+`d2d experiment simulate|power|analyze|aa-test|report` (needs `uv sync --group experiment` for the
+causal forest and plots), `make check` (everything CI
 runs) and `make infra` (Terraform + Ansible checks). Set `D2D_AUTH=off` to skip login during local
 development (never on the Mac mini), `D2D_LLM=off` to run the agent without an LLM (grounded
 fallback answers only) or `D2D_LLM_MODEL=qwen3:8b` for faster answers.
