@@ -88,6 +88,8 @@ jobs:
           uv run d2d model rollout "$(ls models/registry/packages/story-classifier | grep '^mlp-')"
           uv run d2d model drift --shift none
           uv run d2d model status
+
+  infra:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
