@@ -51,7 +51,7 @@ from d2d.hitl.training_set import (
 )
 from d2d.ml.evaluate import evaluate_classifier
 from d2d.ml.infer import classify_new
-from d2d.ml.train import Classifier, TrainParams, load_meta, model_version
+from d2d.ml.train import Classifier, StoryClassifier, TrainParams, load_meta, model_version
 from d2d.ml.train import save as save_model
 from d2d.ml.train import train as train_model
 from d2d.notify import load_notify, run_notifications, sender_from_env
@@ -60,6 +60,7 @@ from d2d.pipeline.events import run_pipeline
 from d2d.pipeline.linking import load_linking
 from d2d.pipeline.semantics import load_semantics
 from d2d.security import evaluate_security, read_events, score_events, write_alerts
+from d2d.serving.cli import app as model_app
 from d2d.simulator import simulate as run_simulation
 from d2d.simulator import write_cdc, write_ground_truth, write_snapshots
 from d2d.simulator.cdc import mirror_cdc_state, plan_cdc
@@ -82,6 +83,7 @@ user_app = typer.Typer(
     help="Web app accounts. Stores only password hashes, in a users file outside git.",
 )
 app.add_typer(user_app, name="user")
+app.add_typer(model_app, name="model")
 
 DataDir = Annotated[Path, typer.Option(help="Data directory (gitignored).")]
 ConfigDir = Annotated[Path | None, typer.Option(help="Config directory (default ./config).")]
@@ -309,12 +311,22 @@ def train(
 @app.command()
 def classify(
     models_dir: ModelsDir = Path("models"),
+    package: Annotated[
+        Path | None,
+        typer.Option(help="ONNX model package (`d2d model package`) instead of --models-dir."),
+    ] = None,
     config: ConfigDir = None,
     database_url: DatabaseUrl = None,
 ) -> None:
     """Label new stories in Postgres; abstained and audit-sampled stories go to review."""
     taxonomy = load_categories(config_dir(config) / "categories.toml")
-    classifier = Classifier(models_dir)
+    classifier: StoryClassifier
+    if package is not None:
+        from d2d.serving.runtime import OnnxClassifier
+
+        classifier = OnnxClassifier(package)
+    else:
+        classifier = Classifier(models_dir)
     engine = _engine(database_url)
     with _db_errors():
         s = classify_new(engine, classifier, taxonomy)
@@ -531,6 +543,9 @@ def calibrate_cmd(
         "evals/golden/stories.jsonl"
     ),
     no_db: Annotated[bool, typer.Option("--no-db", help="Skip feedback export.")] = False,
+    drift: Annotated[
+        Path | None, typer.Option(help="drift.json from `d2d model drift` to include.")
+    ] = None,
     config: ConfigDir = None,
     database_url: DatabaseUrl = None,
 ) -> None:
@@ -538,8 +553,9 @@ def calibrate_cmd(
     cfg_dir = config_dir(config)
     engine = None if no_db else _engine(database_url)
     home_id = load_household(cfg_dir / "household.toml").id
+    drift_report = json.loads(drift.read_text("utf-8")) if drift else None
     with _db_errors():
-        s = calibrate(data_dir, cfg_dir, models_dir, golden, home_id, out, engine)
+        s = calibrate(data_dir, cfg_dir, models_dir, golden, home_id, out, engine, drift_report)
     best, cur = s["linking"]["best"], s["linking"]["current"]
     typer.echo(
         f"linking F1 {cur['pair_f1']:.3f} -> {best['pair_f1']:.3f} "
