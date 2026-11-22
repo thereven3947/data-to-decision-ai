@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from d2d.hitl.training_set import Example
-from d2d.ml.train import Classifier
+from d2d.ml.train import StoryClassifier
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ class ClassifierEval:
         return min(self.precision_by_class.values(), default=1.0)
 
 
-def evaluate_classifier(classifier: Classifier, golden: list[Example]) -> ClassifierEval:
+def evaluate_classifier(classifier: StoryClassifier, golden: list[Example]) -> ClassifierEval:
     predictions = classifier.predict(golden)
     predicted: Counter[str] = Counter()
     right: Counter[str] = Counter()
