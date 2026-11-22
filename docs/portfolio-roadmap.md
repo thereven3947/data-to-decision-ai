@@ -24,6 +24,7 @@ Ground rules for every phase:
 | **M14b · Multimodal & knowledge graph** | `feature/rag-multimodal` | Figure captions, table chunks, entity extraction, entity linking, graph + vector retrieval | ⏳ planned |
 | **M14c · GenAIOps** | `feature/genaiops` | MLflow tracking and registry, LangGraph agent, Phoenix tracing, RAG eval gate | ⏳ planned |
 | **M15 · Self-improving agent loop** | `feature/self-improve` | Reflective and evolutionary prompt/program optimization against the eval gate, with held-out checks and human approval | ⏳ planned |
+| **M16 · Framework-neutral model serving** | `feature/model-serving` | ONNX export, KServe/Triton-style serving with latency and reliability targets, canary rollout, drift monitoring | ⏳ planned |
 
 ## M12 · A/B testing and causal inference (`feature/experimentation`)
 
@@ -178,3 +179,31 @@ Deliverables: `d2d improve run|report|propose`, `docs/self-improving-agent.md` (
 optimizer comparison table, learning curves per generation, held-out results, failure examples,
 limitations), an ADR on the approval and permission model, and tests for config validation,
 guardrail rejection, split isolation (golden set never seen during search) and proposal generation.
+
+## M16 · Framework-neutral model serving (`feature/model-serving`)
+
+Goal: show how a platform packages, serves and monitors models from any framework, the way an ML
+platform team would offer it to data scientists as the default path.
+
+1. **Packaging.** Export the calibrated classifier (scikit-learn or XGBoost) and one small PyTorch
+   model to ONNX (`skl2onnx`, `onnxmltools`, `torch.onnx`; check current docs). Verify numerical
+   parity between native and ONNX predictions (max absolute difference, identical decisions at the
+   precision-first threshold) in tests.
+2. **Model package standard.** A versioned package: model file, input/output schema, calibration and
+   threshold config, training data hash, eval results, and a model card. A CLI command validates a
+   package before it can be served.
+3. **Serving.** Serve with ONNX Runtime behind the existing FastAPI app, and add a KServe-compatible
+   (Open Inference Protocol v2) endpoint. Optionally run NVIDIA Triton or KServe locally (Docker or
+   kind) if it fits on the Mac mini; document what was and was not run.
+4. **Targets.** Define latency (p50/p95/p99), throughput and error-rate targets; benchmark native vs.
+   ONNX Runtime, single vs. batched requests; report CPU and memory.
+5. **Rollout.** Shadow and canary deployment between two model versions with automatic rollback when
+   the eval gate or an error-rate guardrail fails.
+6. **Monitoring.** Input drift (PSI or KS per feature), prediction drift, and calibration drift on
+   simulated traffic with an injected shift; alert and open a retraining proposal through the
+   existing `d2d calibrate` flow.
+7. **Batch and live.** The same package serves both the nightly batch scoring job and the live API.
+
+Deliverables: `d2d model package|validate|serve|bench|rollout`, `docs/model-serving.md` (architecture
+diagram, latency table, parity results, rollout and drift demo), an ADR on the package format, and
+tests for ONNX parity, package validation, the v2 inference schema, canary rollback and drift alerts.

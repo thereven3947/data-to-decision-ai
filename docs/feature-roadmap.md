@@ -21,6 +21,7 @@ Milestones follow the pipeline stages. Each one ends with something demoable; is
 | **M13 · Fine-tuning** | 11 | Local MLX LoRA on Qwen vs. base and `qwen3:14b` | Fine-tuned model evaluated on held-out and golden sets with CIs | ⏳ planned; see [portfolio-roadmap.md](portfolio-roadmap.md) |
 | **M14 · Document RAG & GenAIOps** | 11 | M14a ingestion + pgvector hybrid search, M14b multimodal + knowledge graph, M14c MLflow + LangGraph + Phoenix | Permission-leak rate 0; retrieval and grounding metrics in the eval gate | ⏳ planned; see [portfolio-roadmap.md](portfolio-roadmap.md) |
 | **M15 · Self-improving agent loop** | 11 | Reflective/evolutionary optimization of the agent's prompts, tools and retrieval settings; human-approved proposals | Held-out improvement with CIs; guardrails never violated; golden set unseen during search | ⏳ planned; see [portfolio-roadmap.md](portfolio-roadmap.md) |
+| **M16 · Framework-neutral model serving** | 11 | ONNX packaging, KServe-compatible serving, latency targets, canary rollout, drift monitoring | ONNX parity verified; p95 latency target met; canary rollback demonstrated | ⏳ planned; see [portfolio-roadmap.md](portfolio-roadmap.md) |
 
 M4 is placed right after the first data-plane slices so the Mac mini (arriving 2026-10-15) runs the
 pipeline on a schedule as early as possible.
