@@ -69,7 +69,25 @@ jobs:
           npm run lint
           npm run build
 
-  infra:
+  serving:
+    # M16: optional `serving` group (ONNX Runtime, skl2onnx, torch CPU); the check job stays lean.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --group serving
+      - run: uv run pytest tests/unit/test_serving.py
+      - name: package, gate, rollout and drift on simulated data
+        run: |
+          uv run d2d model package --framework sklearn
+          uv run d2d model package --framework pytorch
+          for pkg in models/registry/packages/story-classifier/*/; do uv run d2d model validate "$pkg"; done
+          uv run d2d model rollout "$(ls models/registry/packages/story-classifier | grep '^clf-')"
+          uv run d2d model rollout "$(ls models/registry/packages/story-classifier | grep '^mlp-')"
+          uv run d2d model drift --shift none
+          uv run d2d model status
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
