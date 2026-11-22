@@ -153,7 +153,10 @@ def cluster_robust_cov(x: Floats, resid: Floats, clusters: Array) -> Floats:
     g = int(inv.max()) + 1
     scores = np.zeros((g, k))
     np.add.at(scores, inv, x * resid[:, None])
-    bread = np.linalg.inv(x.T @ x)
+    # pinv + rank: valid for estimable coefficients when one-hot dummies sit beside an intercept.
+    xtx = x.T @ x
+    bread = np.linalg.pinv(xtx, hermitian=True)
+    k = int(np.linalg.matrix_rank(xtx, hermitian=True))
     meat = scores.T @ scores
     correction = g / (g - 1) * (n - 1) / (n - k)
     return np.asarray(correction * bread @ meat @ bread, dtype=np.float64)

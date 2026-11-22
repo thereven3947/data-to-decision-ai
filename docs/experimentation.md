@@ -166,3 +166,9 @@ decay, and these figures do not claim to show it.
   pre-registration used the pre-period count (8,413). The report was switched to the pre-period
   count so it matches the pre-registration; the MDEs move by ≤ 0.01 pp. No estimate, test or
   decision changed.
+- Bug fix (2026-11-21): the OLS adjustment in the confounding demo puts an intercept next to a full
+  set of one-hot dummies, so `XᵀX` is singular. The cluster-robust SE used a plain inverse, which
+  gave platform-dependent standard errors (a negative variance on Linux CI). It now uses a
+  pseudo-inverse with the true rank. The OLS estimates are unchanged. The OLS 95 % CI for
+  suggestions widened from [+6.58, +9.05] to [+6.37, +9.27] pp and still covers the truth. All other
+  results are identical.

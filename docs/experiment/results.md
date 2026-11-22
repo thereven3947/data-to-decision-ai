@@ -111,11 +111,11 @@ Correlation with true CATE r = 0.346, RMSE +6.72 pp, true CATE SD +5.05 pp; 90% 
 | Exposure | Truth | Estimator | Estimate | 95% CI | Covers truth |
 |---|---:|---|---:|---:|---|
 | treated | +7.70 pp | naive | +14.02 pp | [+12.19, +15.85] | no |
-| treated | +7.70 pp | ols_adjusted | +7.82 pp | [+6.58, +9.05] | yes |
+| treated | +7.70 pp | ols_adjusted | +7.82 pp | [+6.37, +9.27] | yes |
 | treated | +7.70 pp | aipw | +7.84 pp | [+6.38, +9.29] | yes |
 | treated | +7.70 pp | causal_forest | +7.94 pp | [+6.43, +9.45] | yes |
 | history | +0.00 pp | naive | +5.56 pp | [+3.71, +7.41] | no |
-| history | +0.00 pp | ols_adjusted | -0.37 pp | [-1.86, +1.12] | yes |
+| history | +0.00 pp | ols_adjusted | -0.37 pp | [-1.87, +1.13] | yes |
 | history | +0.00 pp | aipw | -0.67 pp | [-2.11, +0.77] | yes |
 | history | +0.00 pp | causal_forest | -0.32 pp | [-1.77, +1.13] | yes |
 

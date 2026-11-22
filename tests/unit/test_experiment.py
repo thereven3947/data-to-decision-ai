@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from d2d.config import load_categories, load_household
 from d2d.experiment.analyze import aa_simulator, analyze, decide, power_table
-from d2d.experiment.observational import confounding_demo
+from d2d.experiment.observational import confounding_demo, ols_adjusted
 from d2d.experiment.simulate import (
     CaseTemplate,
     ExperimentConfig,
@@ -153,6 +153,20 @@ def test_cluster_robust_se_is_wider_than_iid_with_icc(
     iid = diff_in_means(c.converted, c.treated)
     clustered = diff_in_means(c.converted, c.treated, c.reviewer)
     assert clustered.se > 2 * iid.se
+
+
+def test_ols_adjusted_se_survives_redundant_dummies() -> None:
+    rng = np.random.default_rng(SEED)
+    n = 4000
+    clusters = rng.integers(0, 80, n)
+    t = rng.integers(0, 2, n).astype(np.float64)
+    group = rng.integers(0, 4, n)
+    onehot = np.eye(4)[group]
+    y = 0.05 * t + 0.1 * group + rng.normal(0, 1, n)
+    full = ols_adjusted(y, t, onehot, clusters)  # dummy-variable trap with the intercept
+    ref = ols_adjusted(y, t, onehot[:, 1:], clusters)
+    assert full["estimate"] == pytest.approx(ref["estimate"])
+    assert full["se"] == pytest.approx(ref["se"], rel=1e-9)
 
 
 def test_aa_holds_false_positive_rate_near_alpha(
