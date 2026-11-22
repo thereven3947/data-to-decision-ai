@@ -95,11 +95,15 @@ ollama pull nomic-embed-text
 
 ## 4. Tailscale (optional, private remote access)
 
-- Install [Tailscale](https://tailscale.com/download/mac), open it and sign in.
+- Install [Tailscale](https://tailscale.com/download/mac), open it and sign in. Turn on
+  "Launch at login" in its settings.
 - Check from another device on the tailnet: `ping <mac-mini-tailscale-name>`.
-- Ollama listens on localhost only. For remote access add
-  `<key>EnvironmentVariables</key><dict><key>OLLAMA_HOST</key><string>0.0.0.0</string></dict>`
-  to the plist above and restart it, then `curl http://<mac-mini>:11434/api/tags`.
+- Ollama has no authentication, so it stays on localhost and Tailscale Serve forwards it to the
+  tailnet only (never `tailscale funnel`): `tailscale serve --bg --tcp 11434 tcp://localhost:11434`,
+  check with `tailscale serve status` (shows "tailnet only"; the setting persists across reboots).
+  Other tailnet devices use `http://<tailscale-100.x-ip>:11434`. The MagicDNS name returns 403,
+  because Ollama rejects non-local `Host` headers; use the IP, or send `Host: localhost`. Undo with
+  `tailscale serve --tcp=11434 off`.
 
 ## 5. Code and first run
 
