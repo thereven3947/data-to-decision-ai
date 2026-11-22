@@ -166,6 +166,7 @@ for components, deployment, and data lineage.
 - [Analytics warehouse](docs/analytics-warehouse.md) — star-schema export, BigQuery views, Looker
 - [MCP server](docs/mcp.md) — the Copilot's read-only tools for Claude Desktop, VS Code and other agents
 - [Infrastructure as code](docs/infrastructure-as-code.md) — Terraform (BigQuery, off-site backups), Ansible (Mac mini)
+- [Model serving](docs/model-serving.md) — ONNX packages, Open Inference Protocol v2, shadow/canary rollout, drift (opt-in)
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 
