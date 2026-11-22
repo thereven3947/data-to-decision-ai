@@ -29,6 +29,22 @@ dev = [
   "pytest>=8",
   "ruff>=0.6",
 ]
+serving = [
+    "onnx>=1.17",
+    "onnxruntime>=1.20 ; python_full_version < '3.15'",
+    "onnxscript>=0.3 ; python_full_version < '3.15'",
+    "skl2onnx>=1.18",
+    "torch>=2.5 ; python_full_version < '3.15'",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+# CPU-only wheels on Linux (CI); macOS wheels from PyPI already run on CPU/MPS.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [build-system]
 requires = ["hatchling"]
@@ -51,6 +67,12 @@ files = ["src"]
 [[tool.mypy.overrides]]
 module = ["pyarrow", "pyarrow.*", "sklearn", "sklearn.*", "joblib"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Optional `serving` group: absent in the default environment, so typed as Any everywhere.
+module = ["onnx", "onnx.*", "onnxruntime", "onnxruntime.*", "skl2onnx", "skl2onnx.*", "torch", "torch.*", "scipy", "scipy.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
