@@ -11,7 +11,7 @@ from d2d.config import Taxonomy
 from d2d.db import change_story
 from d2d.hitl.review import queue_for_review, record_label
 from d2d.hitl.training_set import examples_from_db
-from d2d.ml.train import Classifier
+from d2d.ml.train import StoryClassifier
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,9 @@ def in_audit_sample(story_id: str, rate: float) -> bool:
     return int(hashlib.sha1(story_id.encode()).hexdigest()[:8], 16) % 10_000 < rate * 10_000
 
 
-def classify_new(engine: Engine, classifier: Classifier, taxonomy: Taxonomy) -> ClassifySummary:
+def classify_new(
+    engine: Engine, classifier: StoryClassifier, taxonomy: Taxonomy
+) -> ClassifySummary:
     """Label every story still in status ``new``. Stories a human touched are never relabeled."""
     with engine.connect() as conn:
         ids = list(
@@ -38,7 +40,7 @@ def classify_new(engine: Engine, classifier: Classifier, taxonomy: Taxonomy) -> 
     examples = examples_from_db(engine, ids)
     ordered = [examples[i] for i in ids if i in examples]
     predictions = classifier.predict(ordered)
-    version = classifier.meta.model_version
+    version = classifier.model_version
     published = audit = abstained = 0
     with engine.begin() as conn:
         for ex, p in zip(ordered, predictions, strict=True):

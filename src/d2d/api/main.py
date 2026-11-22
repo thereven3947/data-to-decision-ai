@@ -486,6 +486,17 @@ def create_app(
             ).scalar_one()
         return {"feedback_id": fid}
 
+    if registry := os.environ.get("D2D_MODEL_REGISTRY"):
+        # Opt-in (M16): ONNX model packages behind the same login as the rest of the API.
+        from d2d.serving.api import v2_router
+        from d2d.serving.server import ModelServer, Registry
+        from d2d.serving.settings import load_serving
+
+        gates = load_serving(config_dir() / "serving.toml").package
+        app.include_router(
+            v2_router(ModelServer(Registry(Path(registry)), gates), dependencies=[get_scope])
+        )
+
     dist = web_dist or Path(os.environ.get("D2D_WEB_DIST") or ROOT / "web" / "dist")
     if (dist / "index.html").is_file():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

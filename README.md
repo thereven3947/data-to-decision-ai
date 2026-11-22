@@ -167,6 +167,7 @@ for components, deployment, and data lineage.
 - [MCP server](docs/mcp.md) — the Copilot's read-only tools for Claude Desktop, VS Code and other agents
 - [Infrastructure as code](docs/infrastructure-as-code.md) — Terraform (BigQuery, off-site backups), Ansible (Mac mini)
 - [Experimentation](docs/experimentation.md) — A/B test and causal inference on simulated review data ([pre-registration](docs/experiment-preregistration.md), [decision memo](docs/experiment-decision-memo.md))
+- [Model serving](docs/model-serving.md) — ONNX packages, Open Inference Protocol v2, shadow/canary rollout, drift (opt-in)
 - [Architecture decision records](docs/adr/)
 - [Backlog](planning/backlog.toml) — source of truth for GitHub milestones and issues
 

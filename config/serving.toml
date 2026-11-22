@@ -1,0 +1,40 @@
+# Model serving (M16). See docs/model-serving.md. Targets were set before the first benchmark.
+
+[package]
+name = "story-classifier"
+min_precision = 0.9       # eval gate on the frozen golden set (same as `d2d eval classifier`)
+min_coverage = 0.7
+max_parity_diff = 1e-5    # native vs ONNX probabilities, max absolute difference
+
+[data]
+# Simulated runs (all data is simulated). Golden (pipeline seed 7) is never used for training.
+train_seeds = [501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512]
+traffic_seeds = [601, 602, 603, 604, 605, 606, 607, 608, 609, 610, 611, 612]
+days = 4
+
+[targets]
+# In-process, one story per call (vectorize + predict).
+inproc_p95_ms = 2.0
+# HTTP v2 infer on localhost, one story per request.
+http_p50_ms = 10.0
+http_p95_ms = 20.0
+http_p99_ms = 50.0
+# HTTP v2 infer, 64 stories per request.
+http_batch_rows_per_s = 2000
+max_error_rate = 0.001
+
+[rollout]
+canary_steps = [0.05, 0.25, 0.5, 1.0]
+requests_per_step = 400
+shadow_requests = 400
+max_error_rate = 0.01
+max_p95_ms = 20.0
+# Labeled simulated traffic: candidate precision on non-abstained predictions.
+min_precision = 0.9
+min_agreement = 0.8       # shadow: same label and abstain decision as stable
+
+[drift]
+psi_alert = 0.25          # per feature (presence rate) and on the predicted-label mix
+ks_pvalue = 0.01          # confidence distribution, two-sample KS
+ece_increase = 0.05       # calibration error vs the reference window
+min_window = 100

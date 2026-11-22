@@ -13,7 +13,7 @@ import json
 import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import joblib
 import numpy as np
@@ -59,6 +59,15 @@ class Prediction:
     category: str
     confidence: float
     abstain: bool
+
+
+class StoryClassifier(Protocol):
+    """Anything that labels stories: the joblib model or an ONNX model package."""
+
+    @property
+    def model_version(self) -> str: ...
+
+    def predict(self, examples: list[Example]) -> list[Prediction]: ...
 
 
 def augment(rows: list[Example], n: int, seed: int) -> list[Example]:
@@ -166,6 +175,10 @@ class Classifier:
             raise FileNotFoundError(f"no model in {models_dir}; run `d2d train` first")
         self.meta = meta
         self.model: Pipeline = joblib.load(models_dir / MODEL_FILE)
+
+    @property
+    def model_version(self) -> str:
+        return self.meta.model_version
 
     def predict(self, examples: list[Example]) -> list[Prediction]:
         if not examples:
