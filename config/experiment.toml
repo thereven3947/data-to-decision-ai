@@ -1,0 +1,69 @@
+# Simulated A/B test of ranked suggested actions in the review flow (docs/experimentation.md).
+# Every number here is a SIMULATOR ground-truth parameter, not a measurement. Cases are resampled
+# from the pipeline's labeled stories (sim_reviewer ground truth) or, without a data dir, from
+# the taxonomy x device kinds in config/.
+
+seed = 20261113
+reviewers = 120
+days = 28
+cases_per_reviewer_day = 5.0
+pre_period_days = 28            # CUPED covariate: each reviewer's control-period conversion
+
+[device_group]                  # device kind -> segment used for heterogeneity
+dishwasher = "appliance"
+washer = "appliance"
+dryer = "appliance"
+robot_vacuum = "appliance"
+fridge = "appliance"
+thermostat = "energy"
+water_heater = "energy"
+ev_charger = "energy"
+smart_plug = "plug_light"
+light_switch = "plug_light"
+ring_camera = "security"
+ring_doorbell = "security"
+garage_door = "security"
+
+[baseline]                      # control: P(convert) = sigmoid(logit terms)
+intercept = -0.85
+reviewer_sd = 0.55              # reviewer random effect (logit scale)
+experience_per_year = 0.06      # experience ~ uniform(0, max_experience_years), centered
+max_experience_years = 12
+severity = { info = -0.30, notice = 0.0, alert = 0.35 }
+device_group = { appliance = 0.0, energy = 0.10, plug_light = -0.15, security = 0.20 }
+
+[effect]                        # true treatment effect, probability points, long-run
+base = 0.06
+experience_per_year = -0.008    # suggestions help junior reviewers more (centered years)
+severity = { info = 0.03, notice = 0.0, alert = -0.03 }
+device_group = { appliance = 0.02, energy = 0.04, plug_light = -0.03, security = -0.02 }
+novelty_boost = 0.5             # extra relative effect on day 0 ...
+novelty_decay_days = 5.0        # ... decaying exponentially
+spillover = 0.4                 # share of the effect leaking into control cases of exposed reviewers
+
+[resolve]                       # time to resolve (minutes), lognormal
+log_mean = 3.0
+log_sd = 0.6
+reviewer_sd = 0.25
+severity = { info = -0.2, notice = 0.0, alert = 0.3 }
+treatment = -0.08               # log-scale effect when treated
+
+[guardrail]
+wrong_given_convert_control = 0.04
+wrong_given_convert_treatment = 0.03
+suggestion_wrong_rate = 0.06    # ranked list led by an action from the wrong playbook
+follow_wrong_suggestion = 0.4
+escalate_info_control = 0.10    # false escalation = escalated while severity is info
+escalate_info_treatment = 0.08
+
+[srm_bug]                       # optional injected logging bug (off unless --srm-bug):
+drop_treatment_slower_than_minutes = 30.0   # treatment-arm client drops slow sessions
+drop_rate = 0.5
+
+[observational]                 # reviewers choose to open suggestions; selection on observables
+intercept = -0.2
+experience_per_year = 0.12
+pre_conversion = 4.0            # skilled reviewers (high pre-period conversion) opt in more
+severity = { info = -0.4, notice = 0.0, alert = 0.6 }
+history_intercept = -0.5        # "opened device history": zero true effect, confounded
+history_pre_conversion = 5.0

@@ -69,6 +69,22 @@ jobs:
           npm run lint
           npm run build
 
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --group experiment
+      - run: uv run pytest tests/unit/test_experiment.py tests/unit/test_experiment_hte.py
+      - name: report smoke run (simulated data)
+        run: |
+          uv run d2d simulate --data-dir data/check
+          uv run d2d run --data-dir data/check
+          uv run d2d experiment report --data-dir data/check --aa-sims 20 \
+            --out data/check/experiment --plots data/check/experiment/images
+
   infra:
     runs-on: ubuntu-latest
     steps:
