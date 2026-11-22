@@ -154,6 +154,7 @@ def calibrate(
     home_id: str,
     out: Path,
     engine: Engine | None,
+    drift: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     items = export_eval_items(engine, out) if engine is not None else {}
@@ -201,6 +202,9 @@ def calibrate(
         "data_reports": items.get("data", []),
         "changed": linking_changed or bool(items),
     }
+    if drift is not None:
+        summary["drift"] = drift
+        summary["changed"] = summary["changed"] or bool(drift.get("alert"))
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", "utf-8")
     (out / "report.md").write_text(render_report(summary), "utf-8")
     return summary
@@ -259,4 +263,11 @@ def render_report(s: dict[str, Any]) -> str:
             target = d.get("target", {})
             note = d.get("comment") or "no comment"
             lines.append(f"- {target.get('type')} `{target.get('id')}`: {d.get('reason')}, {note}")
+    if drift := s.get("drift"):
+        lines += ["", f"## Serving drift ({drift['model']})", ""]
+        lines += [f"- {a}" for a in drift["alerts"]] or ["- no drift alert"]
+        if drift.get("alert"):
+            lines.append(
+                "- Proposal: retrain on recent labeled stories and roll out as a candidate."
+            )
     return "\n".join(lines) + "\n"
