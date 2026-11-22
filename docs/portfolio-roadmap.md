@@ -1,4 +1,4 @@
-# Portfolio roadmap: experimentation, fine-tuning, document RAG and GenAIOps
+# Portfolio roadmap: experimentation, fine-tuning, document RAG, GenAIOps and self-improving agents
 
 These phases extend the pipeline in [feature-roadmap.md](feature-roadmap.md) (M0–M11, done). They run
 on the Mac mini (Apple silicon M4, 32 GB, Ollama with `qwen3:14b`; see [mac-mini-setup.md](mac-mini-setup.md)).
@@ -23,6 +23,7 @@ Ground rules for every phase:
 | **M14a · Document ingestion & vector search** | `feature/rag-ingest` | Parsing, chunking, pgvector, hybrid search, permission-aware retrieval, scale benchmark | ⏳ planned |
 | **M14b · Multimodal & knowledge graph** | `feature/rag-multimodal` | Figure captions, table chunks, entity extraction, entity linking, graph + vector retrieval | ⏳ planned |
 | **M14c · GenAIOps** | `feature/genaiops` | MLflow tracking and registry, LangGraph agent, Phoenix tracing, RAG eval gate | ⏳ planned |
+| **M15 · Self-improving agent loop** | `feature/self-improve` | Reflective and evolutionary prompt/program optimization against the eval gate, with held-out checks and human approval | ⏳ planned |
 
 ## M12 · A/B testing and causal inference (`feature/experimentation`)
 
@@ -140,3 +141,40 @@ benchmark and eval tables, failure examples, limitations); ADRs for parser, chun
 LangGraph adoption; tests for chunk metadata and dedup, incremental re-ingestion, permission
 filtering, RRF fusion, retrieval-eval math, graph linking and the LangGraph abstain path; README
 updates (features and docs links).
+
+## M15 · Self-improving agent loop (`feature/self-improve`)
+
+Goal: let the Copilot improve its own prompts, tool descriptions and retrieval settings from eval
+results and feedback, while every change stays reviewable and reversible. The production agent is
+read-only by design; this milestone shows how granting a narrow "propose an edit" permission unlocks
+a safe self-improvement loop.
+
+1. **Benchmark.** Split the eval sets (the M14c RAG set, the agent eval set, and the simulated reviewer
+   feedback from `src/d2d/hitl/`) into an optimization split and a held-out split. The frozen golden
+   set (`evals/golden/`) is only ever used for the final check, never for search.
+2. **Search space.** A typed config for the agent program: system prompt sections, tool descriptions,
+   few-shot examples, retrieval `k` and fusion weights, abstention threshold. Versioned and diffable.
+3. **Optimizers** (check current papers and library docs before implementing):
+   - Baseline: random search over the config.
+   - Reflective search (GEPA- or Reflexion-style): an LLM reads failed traces and grader feedback,
+     proposes targeted edits, keeps a Pareto front over metrics.
+   - Evolutionary search: a population of configs with mutation and crossover, selection by the eval
+     score with a cost penalty.
+   - Optional: DSPy (for example MIPROv2 or GEPA) as a reference implementation to compare against.
+4. **Objective and guardrails.** Maximize grounding pass rate and answer accuracy subject to
+   permission-leak rate = 0, abstention precision not dropping, and latency and token budgets. Reject
+   any candidate that fails a guardrail, regardless of score.
+5. **Feedback loop.** Summarize simulated reviewer feedback and failed traces into improvement
+   proposals (extending the nightly `d2d calibrate` flow). The loop opens a branch and an issue with
+   the config diff, the metric deltas with bootstrap CIs, and example traces; a human approves the
+   merge. Nothing is applied automatically.
+6. **Overfitting checks.** Report optimization-split vs. held-out vs. golden-set scores; a shuffled-
+   feedback control; and the number of evaluations used (search budget).
+7. **On-device angle.** Run the loop with the local Qwen models via Ollama or MLX on the Mac mini, and
+   report evaluations per hour and cost, including the M13 fine-tuned model as a candidate.
+8. **Tracking.** Log every candidate and generation to MLflow (M14c) with its config diff and metrics.
+
+Deliverables: `d2d improve run|report|propose`, `docs/self-improving-agent.md` (loop diagram,
+optimizer comparison table, learning curves per generation, held-out results, failure examples,
+limitations), an ADR on the approval and permission model, and tests for config validation,
+guardrail rejection, split isolation (golden set never seen during search) and proposal generation.
